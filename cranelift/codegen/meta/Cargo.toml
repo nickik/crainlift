@@ -18,12 +18,9 @@ rustdoc-args = ["--document-private-items"]
 cranelift-srcgen = { workspace = true }
 cranelift-assembler-x64-meta = { path = "../../assembler-x64/meta", version = "0.137.0-dev" }
 cranelift-codegen-shared = { path = "../shared", version = "0.137.0-dev" }
-pulley-interpreter = { workspace = true, optional = true }
 heck = "0.5.0"
 
 [features]
-pulley = ['dep:pulley-interpreter']
-# Include the ISLE verification specs in the ISLE compilation
-# inputs. Only the ISLE verifier tooling needs these; normal codegen
-# builds leave them out.
+# Kept for source compatibility; Pulley is intentionally not carried in this fork.
+pulley = []
 spec = []

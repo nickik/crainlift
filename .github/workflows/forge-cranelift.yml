@@ -1,0 +1,22 @@
+name: Forge Cranelift
+
+on:
+  push:
+    branches: [forge-minimal]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check retained Cranelift workspace
+        run: |
+          cargo check -p cranelift-codegen --no-default-features --features std,arm64,riscv64
+          cargo check -p cranelift-frontend
+          cargo check -p cranelift-module
+          cargo check -p cranelift-native

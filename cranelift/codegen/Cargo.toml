@@ -16,7 +16,6 @@ rust-version.workspace = true
 workspace = true
 
 [package.metadata.docs.rs]
-# Ask Cargo to build docs with the feature `all-arch`
 features = ["all-arch"]
 
 [dependencies]
@@ -34,7 +33,6 @@ target-lexicon = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_derive = { workspace = true, optional = true }
-pulley-interpreter = { workspace = true, optional = true }
 postcard = { workspace = true, optional = true }
 gimli = { workspace = true, features = ["write"], optional = true }
 smallvec = { workspace = true }
@@ -44,10 +42,6 @@ sha2 = { workspace = true, optional = true }
 rustc-hash = { workspace = true }
 wasmtime-core = { workspace = true }
 libm = { workspace = true }
-# It is a goal of the cranelift-codegen crate to have minimal external dependencies.
-# Please don't add any unless they are essential to the task of creating binary
-# machine code. Integration tests that need external dependencies can be
-# accommodated in `tests`.
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -62,55 +56,23 @@ cranelift-isle = { path = "../isle/isle", version = "=0.137.0-dev" }
 
 [features]
 default = ["std", "unwind", "host-arch", "timing"]
-
-# The "std" feature enables use of libstd.
-std = ["serde?/std", "rustc-hash/std", "gimli/std", "cranelift-control/fuzz"]
-
-# The "core" feature used to enable a hashmap workaround, but is now deprecated
-# (now we always use hashbrown). The feature remains for backward compatibility.
+# Forge does not need Cranelift's fuzz-control support just to use std. Keep
+# optional Gimli inactive unless an unwind-related feature actually selects it.
+std = ["serde?/std", "rustc-hash/std", "gimli?/std"]
 core = []
-
-# Enable the `to_capstone` method on TargetIsa, for constructing a Capstone
-# context, and the `disassemble` method on `MachBufferFinalized`.
 disas = ["anyhow", "capstone"]
-
-# Enables detailed logging which can be somewhat expensive.
 trace-log = ["regalloc2/trace-log"]
-
-# By default, an ISLE term is compiled into a single Rust function, but it can be
-# significantly inefficient for large terms (e.g. `simplify` with hundreds of rules).
-# This is because the generated Rust code for such terms is large, and `rustc` takes quadratically longer to compile huge functions.
-# This feature splits large match arms in such ISLE terms into closures, for compiling ISLE terms more efficiently.
-# However, this can degrade Cranelift compilation times, introducing ABI boundaries between the closures.
-# Therefore, we recommend enabling this feature only for debugging/development purposes.
 isle-split-match = []
-
-# This enables unwind info generation functionality.
 unwind = ["gimli"]
-
-# ISA targets for which we should build.
-# If no ISA targets are explicitly enabled, the ISA target for the host machine is enabled.
 x86 = []
 arm64 = []
 s390x = []
 riscv64 = []
-pulley = [
-    "dep:pulley-interpreter",
-    "pulley-interpreter/encode",
-    "pulley-interpreter/disas",
-    "cranelift-codegen-meta/pulley",
-]
-# Enable the ISA target for the host machine
+# Kept as an empty compatibility feature; this fork intentionally omits Pulley.
+pulley = []
 host-arch = []
-
-# Option to enable all architectures.
-all-arch = ["all-native-arch", "pulley"]
-
-# Option to enable all architectures that correspond to an actual native target
-# (that is, exclude Pulley).
+all-arch = ["all-native-arch"]
 all-native-arch = ["x86", "arm64", "s390x", "riscv64"]
-
-# For dependent crates that want to serialize some parts of cranelift
 enable-serde = [
     "serde",
     "serde_derive",
@@ -120,17 +82,7 @@ enable-serde = [
     "hashbrown/serde",
     "smallvec/serde",
 ]
-
-# Enable the incremental compilation cache for hot-reload use cases.
 incremental-cache = ["enable-serde", "postcard", "sha2"]
-
-# Enable support for the Souper harvester.
 souper-harvest = ["souper-ir", "souper-ir/stringify"]
-
-# Report any ISLE errors in pretty-printed style.
 isle-errors = ["cranelift-isle/fancy-errors"]
-
-# Enable tracking how long passes take in Cranelift.
-#
-# Enabled by default.
 timing = []
