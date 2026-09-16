@@ -7,12 +7,6 @@
 (decl partial lower (Inst) InstOutput)
 (decl partial lower_branch (Inst MachLabelSlice) Unit)
 
-;; Values no wider than the native SIA word use one integer register.
-(decl pure partial sia_word_ty (Type) Type)
-(rule (sia_word_ty $I8) $I8)
-(rule (sia_word_ty $I16) $I16)
-(rule (sia_word_ty $I32) $I32)
-
 ;; Emit one result-producing instruction.
 (decl sia_emit_result (MInst WritableReg) InstOutput)
 (rule (sia_emit_result inst dst)
@@ -21,37 +15,37 @@
 
 ;;;; Constants ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(rule (lower (iconst (sia_word_ty ty) (u64_from_imm64 n)))
+(rule (lower (iconst (fits_in_32 (ty_int ty)) (u64_from_imm64 n)))
       (let ((dst WritableReg (temp_writable_reg ty)))
         (sia_emit_result (sia_load_const dst n) dst)))
 
 ;;;; Integer ALU ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(rule (lower (iadd (sia_word_ty ty) x y))
+(rule (lower (iadd (fits_in_32 (ty_int ty)) x y))
       (let ((dst WritableReg (temp_writable_reg ty))
             (lhs Reg (put_in_reg x))
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_add dst lhs rhs) dst)))
 
-(rule (lower (isub (sia_word_ty ty) x y))
+(rule (lower (isub (fits_in_32 (ty_int ty)) x y))
       (let ((dst WritableReg (temp_writable_reg ty))
             (lhs Reg (put_in_reg x))
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_sub dst lhs rhs) dst)))
 
-(rule (lower (band (sia_word_ty ty) x y))
+(rule (lower (band (fits_in_32 (ty_int ty)) x y))
       (let ((dst WritableReg (temp_writable_reg ty))
             (lhs Reg (put_in_reg x))
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_and dst lhs rhs) dst)))
 
-(rule (lower (bor (sia_word_ty ty) x y))
+(rule (lower (bor (fits_in_32 (ty_int ty)) x y))
       (let ((dst WritableReg (temp_writable_reg ty))
             (lhs Reg (put_in_reg x))
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_or dst lhs rhs) dst)))
 
-(rule (lower (bxor (sia_word_ty ty) x y))
+(rule (lower (bxor (fits_in_32 (ty_int ty)) x y))
       (let ((dst WritableReg (temp_writable_reg ty))
             (lhs Reg (put_in_reg x))
             (rhs Reg (put_in_reg y)))
@@ -123,10 +117,10 @@
             (base Reg (put_in_reg addr)))
         (sia_emit_result (sia_load_offset dst base offset ty) dst)))
 
-(rule (lower (load (sia_word_ty ty) (little_or_native_endian _) addr (offset32 offset)))
+(rule (lower (load (fits_in_32 (ty_int ty)) (little_or_native_endian _) addr (offset32 offset)))
       (sia_load_result ty addr offset))
 
-(rule (lower (store (little_or_native_endian _) src @ (value_type (sia_word_ty ty)) addr (offset32 offset)))
+(rule (lower (store (little_or_native_endian _) src @ (value_type (fits_in_32 (ty_int ty))) addr (offset32 offset)))
       (let ((value Reg (put_in_reg src))
             (base Reg (put_in_reg addr)))
         (side_effect (SideEffectNoResult.Inst (sia_store_offset value base offset ty)))))
