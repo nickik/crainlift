@@ -26,6 +26,7 @@ mod abi_contract;
 mod inst;
 mod inst_abi_compat;
 mod label;
+mod reloc;
 #[allow(missing_docs)]
 pub mod encode;
 #[allow(missing_docs)]
