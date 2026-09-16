@@ -80,6 +80,21 @@ pub use crate::machinst::{
     VCodeConstant, VCodeConstantData, VCodeConstants, VCodeInst, Writable,
 };
 
+/// Compatibility name for finalized exception handlers used by cg_clif.
+///
+/// Finalized call-site records contain `MachExceptionHandler`s whose
+/// `LabelOrOffset` values have been resolved to offsets.
+pub type FinalizedMachExceptionHandler = MachExceptionHandler;
+
+// cg_clif's retained debug-info code converts finalized landing pads directly
+// to u64. Preserve that API while asserting that finalization really resolved
+// the label before exposing the offset.
+impl From<LabelOrOffset> for u64 {
+    fn from(value: LabelOrOffset) -> Self {
+        u64::from(value.as_offset())
+    }
+}
+
 mod alias_analysis;
 mod branch_to_trap;
 mod constant_hash;
