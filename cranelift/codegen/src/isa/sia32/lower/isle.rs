@@ -2,15 +2,24 @@
 
 pub mod generated_code;
 
+use self::generated_code::MInst;
+use crate::ir::condcodes::{FloatCC, IntCC};
 use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
 use crate::machinst::isle::*;
-use crate::machinst::{Lower, MachLabel, Reg, VCodeInst};
-
-// `inst.isle` declares MInst as a primitive. Generated ISLE code resolves that
-// primitive through this type alias rather than defining a second instruction
-// enum, so the Rust emitter remains authoritative.
-type MInst = MachineInst;
+use crate::machinst::{
+    CallArgList, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
+    VCodeConstantData, VCodeInst,
+};
+use crate::{
+    ir::{
+        BlockCall, Inst, InstructionData, MemFlagsData, Opcode, TrapCode, Type, Value, ValueList,
+        immediates::*, types::*,
+    },
+};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use regalloc2::PReg;
 
 // `increment_lowered_uses` in the pinned Cranelift revision is cfg-gated to the
 // pre-existing native backends. The shared ISLE prelude only needs the semantic
@@ -28,18 +37,169 @@ impl<I: VCodeInst> SiaLowerUseExt for Lower<'_, I> {
 }
 
 pub(crate) struct Sia32IsleContext<'a, 'b> {
-    pub lower_ctx: &'a mut Lower<'b, MInst>,
+    pub lower_ctx: &'a mut Lower<'b, MachineInst>,
     pub backend: &'a Sia32Backend,
 }
 
 impl<'a, 'b> Sia32IsleContext<'a, 'b> {
-    fn new(lower_ctx: &'a mut Lower<'b, MInst>, backend: &'a Sia32Backend) -> Self {
+    fn new(lower_ctx: &'a mut Lower<'b, MachineInst>, backend: &'a Sia32Backend) -> Self {
         Self { lower_ctx, backend }
+    }
+
+    pub(crate) fn dfg(&self) -> &crate::ir::DataFlowGraph {
+        &self.lower_ctx.f.dfg
+    }
+}
+
+impl MInst {
+    // Required by the shared lowering prelude. Keep `ty` in the signature to
+    // match MachInst::gen_move even though SIA's scalar register move encoding
+    // is type-independent for the R0 integer subset.
+    fn gen_move(dst: WritableReg, src: Reg, _ty: Type) -> Self {
+        Self::Mov { dst, src }
+    }
+}
+
+impl From<MachineInst> for MInst {
+    fn from(inst: MachineInst) -> Self {
+        match inst {
+            MachineInst::Mov { dst, src } => Self::Mov { dst, src },
+            MachineInst::StackAddr { dst, mem } => Self::StackAddr { dst, mem },
+            other => panic!("SIA ISLE wrapper cannot represent shared-prelude instruction {other:?}"),
+        }
+    }
+}
+
+fn into_machine_inst(inst: &MInst) -> MachineInst {
+    match inst {
+        MInst::Mov { dst, src } => MachineInst::Mov {
+            dst: *dst,
+            src: *src,
+        },
+        MInst::StackAddr { dst, mem } => MachineInst::StackAddr {
+            dst: *dst,
+            mem: *mem,
+        },
+        MInst::LoadConst32 { dst, value } => MachineInst::LoadConst32 {
+            dst: *dst,
+            value: *value,
+        },
+        MInst::Add { dst, lhs, rhs } => MachineInst::Add {
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Sub { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Sub,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::And { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::And,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Or { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Or,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Xor { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Xor,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Shl { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Shl,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Shr { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Shr,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Sar { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Sar,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Clz { dst, src } => MachineInst::Unary {
+            op: UnaryOp::Clz,
+            dst: *dst,
+            src: *src,
+        },
+        MInst::Ctz { dst, src } => MachineInst::Unary {
+            op: UnaryOp::Ctz,
+            dst: *dst,
+            src: *src,
+        },
+        MInst::Cpop { dst, src } => MachineInst::Unary {
+            op: UnaryOp::Cpop,
+            dst: *dst,
+            src: *src,
+        },
+        MInst::Extend {
+            dst,
+            src,
+            signed,
+            from_bits,
+            to_bits,
+        } => MachineInst::Extend {
+            dst: *dst,
+            src: *src,
+            signed: *signed,
+            from_bits: *from_bits,
+            to_bits: *to_bits,
+        },
+        MInst::LoadBaseOffset {
+            dst,
+            base,
+            offset,
+            ty,
+        } => MachineInst::LoadBaseOffset {
+            dst: *dst,
+            base: *base,
+            offset: *offset,
+            ty: *ty,
+        },
+        MInst::StoreBaseOffset {
+            src,
+            base,
+            offset,
+            ty,
+        } => MachineInst::StoreBaseOffset {
+            src: *src,
+            base: *base,
+            offset: *offset,
+            ty: *ty,
+        },
+        MInst::Jump { target } => MachineInst::Jump { target: *target },
+        MInst::BrNz {
+            test,
+            taken,
+            not_taken,
+        } => MachineInst::BrNz {
+            test: *test,
+            taken: *taken,
+            not_taken: *not_taken,
+        },
     }
 }
 
 impl generated_code::Context for Sia32IsleContext<'_, '_> {
     isle_lower_prelude_methods!();
+
+    fn emit(&mut self, inst: &MInst) -> Unit {
+        self.lower_ctx.emit(into_machine_inst(inst));
+    }
 
     fn sia_load_const(&mut self, dst: WritableReg, value: u64) -> MInst {
         let value = u32::try_from(value).expect("SIA32 word iconst must fit 32 bits");
@@ -51,43 +211,43 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
     }
 
     fn sia_sub(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::TwoOp { op: TwoOp::Sub, dst, lhs, rhs }
+        MInst::Sub { dst, lhs, rhs }
     }
 
     fn sia_and(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::TwoOp { op: TwoOp::And, dst, lhs, rhs }
+        MInst::And { dst, lhs, rhs }
     }
 
     fn sia_or(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::TwoOp { op: TwoOp::Or, dst, lhs, rhs }
+        MInst::Or { dst, lhs, rhs }
     }
 
     fn sia_xor(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::TwoOp { op: TwoOp::Xor, dst, lhs, rhs }
+        MInst::Xor { dst, lhs, rhs }
     }
 
     fn sia_shl(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::TwoOp { op: TwoOp::Shl, dst, lhs, rhs }
+        MInst::Shl { dst, lhs, rhs }
     }
 
     fn sia_shr(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::TwoOp { op: TwoOp::Shr, dst, lhs, rhs }
+        MInst::Shr { dst, lhs, rhs }
     }
 
     fn sia_sar(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::TwoOp { op: TwoOp::Sar, dst, lhs, rhs }
+        MInst::Sar { dst, lhs, rhs }
     }
 
     fn sia_clz(&mut self, dst: WritableReg, src: Reg) -> MInst {
-        MInst::Unary { op: UnaryOp::Clz, dst, src }
+        MInst::Clz { dst, src }
     }
 
     fn sia_ctz(&mut self, dst: WritableReg, src: Reg) -> MInst {
-        MInst::Unary { op: UnaryOp::Ctz, dst, src }
+        MInst::Ctz { dst, src }
     }
 
     fn sia_popcnt(&mut self, dst: WritableReg, src: Reg) -> MInst {
-        MInst::Unary { op: UnaryOp::Cpop, dst, src }
+        MInst::Cpop { dst, src }
     }
 
     fn sia_extend(
@@ -98,15 +258,31 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         from_bits: u8,
         to_bits: u8,
     ) -> MInst {
-        MInst::Extend { dst, src, signed, from_bits, to_bits }
+        MInst::Extend {
+            dst,
+            src,
+            signed,
+            from_bits,
+            to_bits,
+        }
     }
 
     fn sia_load_offset(&mut self, dst: WritableReg, base: Reg, offset: i32, ty: Type) -> MInst {
-        MInst::LoadBaseOffset { dst, base, offset, ty }
+        MInst::LoadBaseOffset {
+            dst,
+            base,
+            offset,
+            ty,
+        }
     }
 
     fn sia_store_offset(&mut self, src: Reg, base: Reg, offset: i32, ty: Type) -> MInst {
-        MInst::StoreBaseOffset { src, base, offset, ty }
+        MInst::StoreBaseOffset {
+            src,
+            base,
+            offset,
+            ty,
+        }
     }
 
     fn sia_jump(&mut self, target: MachLabel) -> MInst {
@@ -114,31 +290,29 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
     }
 
     fn sia_brnz(&mut self, test: Reg, taken: MachLabel, not_taken: MachLabel) -> MInst {
-        MInst::BrNz { test, taken, not_taken }
+        MInst::BrNz {
+            test,
+            taken,
+            not_taken,
+        }
     }
 }
 
 pub(crate) fn lower(
-    lower_ctx: &mut Lower<MInst>,
+    lower_ctx: &mut Lower<MachineInst>,
     backend: &Sia32Backend,
     inst: Inst,
 ) -> Option<InstOutput> {
     let mut isle_ctx = Sia32IsleContext::new(lower_ctx, backend);
-    match generated_code::constructor_lower(&mut isle_ctx, inst) {
-        Ok(output) => output,
-        Err(_) => panic!("SIA32 ISLE lower constructor returned an internal error for {inst:?}"),
-    }
+    generated_code::constructor_lower(&mut isle_ctx, inst)
 }
 
 pub(crate) fn lower_branch(
-    lower_ctx: &mut Lower<MInst>,
+    lower_ctx: &mut Lower<MachineInst>,
     backend: &Sia32Backend,
     branch: Inst,
     targets: &[MachLabel],
 ) -> Option<()> {
     let mut isle_ctx = Sia32IsleContext::new(lower_ctx, backend);
-    match generated_code::constructor_lower_branch(&mut isle_ctx, branch, targets) {
-        Ok(output) => output,
-        Err(_) => panic!("SIA32 ISLE branch constructor returned an internal error for {branch:?}"),
-    }
+    generated_code::constructor_lower_branch(&mut isle_ctx, branch, targets)
 }

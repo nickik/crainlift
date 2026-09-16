@@ -1,7 +1,88 @@
-;; SIA32 machine instruction constructors exposed to ISLE.
-;; The actual MachInst enum remains defined in Rust.
+;; SIA32 machine-instruction constructors exposed to ISLE.
+;;
+;; Keep this as an ISLE enum rather than an opaque primitive. ISLE primitives
+;; are required to be Copy, while the authoritative Rust MachineInst contains
+;; Vec/Box variants and is intentionally not Copy. The lowering glue converts
+;; this small R0-facing enum into the existing Rust MachineInst at emit time.
 
-(type MInst (primitive MInst))
+;; StackAMode itself is a small copyable ABI descriptor from MachInst and is
+;; legitimately opaque to the SIA selection rules.
+(type StackAMode (primitive StackAMode))
+
+(type MInst
+  (enum
+    (Mov
+      (dst WritableReg)
+      (src Reg))
+    (StackAddr
+      (dst WritableReg)
+      (mem StackAMode))
+    (LoadConst32
+      (dst WritableReg)
+      (value u32))
+    (Add
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (Sub
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (And
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (Or
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (Xor
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (Shl
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (Shr
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (Sar
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
+    (Clz
+      (dst WritableReg)
+      (src Reg))
+    (Ctz
+      (dst WritableReg)
+      (src Reg))
+    (Cpop
+      (dst WritableReg)
+      (src Reg))
+    (Extend
+      (dst WritableReg)
+      (src Reg)
+      (signed bool)
+      (from_bits u8)
+      (to_bits u8))
+    (LoadBaseOffset
+      (dst WritableReg)
+      (base Reg)
+      (offset i32)
+      (ty Type))
+    (StoreBaseOffset
+      (src Reg)
+      (base Reg)
+      (offset i32)
+      (ty Type))
+    (Jump
+      (target MachLabel))
+    (BrNz
+      (test Reg)
+      (taken MachLabel)
+      (not_taken MachLabel))))
 
 (decl sia_load_const (WritableReg u64) MInst)
 (extern constructor sia_load_const sia_load_const)
