@@ -1,170 +1,90 @@
 # SIA32 Cranelift ABI
 
-Status: implemented compiler ABI for the `sia32` backend on branch `sia32-backend`.
+Status: implemented ABI contract on `sia32-backend`. This file documents the behavior in `isa/sia32/abi.rs`, `inst.rs`, and `regs.rs`; it does not describe planned behavior.
 
-This document describes the ABI actually implemented by `cranelift/codegen/src/isa/sia32/abi.rs`, `inst.rs`, and `regs.rs`. It is the contract that Forge and Cosmic should target until deliberately versioned.
+## Machine and registers
 
-## Machine model
+SIA32 is a 32-bit little-endian target with sixteen integer registers. `r0` is fixed zero. `r13` is the stack pointer, `r14` is the link register, and `r12` is reserved to the backend as a non-allocatable scratch/return temporary. `r15` remains allocatable and is callee-saved; the current ABI does not require a frame pointer.
 
-- XLEN / pointer width: 32 bits.
-- Endianness: little-endian.
-- Architectural GPRs: `r0..r15`.
-- `r0`: fixed zero, never allocatable.
-- `r13`: stack pointer (`sp`), fixed, never allocatable.
-- `r14`: link register (`lr`), fixed, never allocatable.
-- `r12`: reserved compiler scratch register, never allocatable. It is available to emitter/prologue/relaxation expansion and must not carry an SSA value across an instruction expansion.
-- `r15`: allocatable, callee-saved. It is the ABI's optional frame-pointer register when a frame pointer is introduced later.
-- No architectural flags/condition-code register is part of the ABI.
+The regalloc integer set is exactly:
 
-## Register classes
+- preferred/caller-saved: `r1..r8`
+- non-preferred/callee-saved: `r9..r11`, `r15`
+- fixed/non-allocatable: `r0`, `r12`, `r13`, `r14`
 
-The initial backend exposes one Cranelift register class only: integer.
+Calls clobber `r1..r8`, `r12`, and `r14`. Used `r9..r11` and `r15` are preserved by the callee.
 
-- `I8`, `I16`, `I32`, pointers and references occupy one 32-bit integer GPR.
-- `I64` occupies two integer GPR parts, low 32 bits first, high 32 bits second.
-- Floating-point and vector SSA classes are unsupported in the initial backend.
-- `I128` is unsupported.
+Only the integer register class is implemented. `I8`, `I16`, `I32`, pointers and references use one 32-bit register part. `I64` uses two I32 register parts in low-word/high-word order. Floating point, vectors and I128 are not implemented.
 
-## Register allocation set
+## Calling-convention identity
 
-Allocatable registers are:
+The backend currently accepts only Cranelift `SystemV`. `SystemV` is used as the compiler calling-convention identifier; the actual placement rules below are SIA32-specific. Other Cranelift conventions are rejected rather than mapped to another architecture's ABI.
 
-- preferred / caller-saved: `r1..r8`
-- non-preferred / callee-saved: `r9..r11`, `r15`
+## Arguments
 
-Fixed / unavailable to regalloc:
+Normal scalar arguments are allocated left-to-right to `r1` through `r6`. Once an argument cannot be placed in the remaining argument registers, that argument and all subsequent normal arguments use the stack.
 
-- `r0` zero
-- `r12` compiler scratch
-- `r13` `sp`
-- `r14` `lr`
+An `I64` requires a complete aligned register pair. Register pairs are `r1:r2`, `r3:r4`, and `r5:r6`; the low 32 bits are in the lower-numbered register. If the next available register is even, it is skipped before allocating an I64 pair. An I64 is never split between registers and stack.
 
-## Calling convention
+Stack scalar argument slots are 4-byte aligned and occupy 4 bytes. Stack I64 values are 8-byte aligned and occupy 8 bytes, low word at the lower address. The complete stack argument area is rounded to 8 bytes.
 
-The stable public calling convention is Cranelift `SystemV` as an identifier only; the actual register and stack rules are SIA32-specific and are defined here. Other Cranelift calling conventions are rejected rather than inheriting another target's convention.
+Narrow integer extension is signature-driven: `get_ext_mode()` preserves the `ArgumentExtension` requested by CLIF for both register and stack locations.
 
-### Scalar arguments
+### Hidden return-area pointer
 
-Scalar integer/pointer arguments are assigned left-to-right to:
+When Cranelift requests an implicit stack return area (`add_ret_area_ptr`), the hidden pointer is physically assigned to `r1` and formal user-argument allocation starts at `r2`. It is represented as a non-formal ABI argument in Cranelift's metadata.
 
-`r1, r2, r3, r4, r5, r6`
+`StructArgument` is rejected. Aggregates must currently be lowered explicitly by address. The backend does not synthesize aggregate memcpy.
 
-After the argument-register area is exhausted, arguments are passed on the stack.
+## Returns
 
-Narrow integer values use a full 32-bit register/slot. The generic ABI does not promise sign or zero extension beyond the argument type's explicit lowering requirements.
+The register return area is exactly `r1:r2`.
 
-### I64 arguments
+- one scalar return: `r1`
+- two scalar returns: `r1`, then `r2`
+- one I64 return: `r1:r2`, low word in `r1`
 
-`I64` consumes an aligned pair of argument locations and is represented low word first.
+A return that does not fit completely in `r1:r2` cannot use further registers. If Cranelift's multi-return implicit-sret support is enabled, excess return values use its stack-return-area mechanism; otherwise ABI construction fails explicitly.
 
-Register pairs therefore begin on an odd-numbered architectural argument register and use consecutive registers. For example:
+The current exception-payload compiler hook names `r1` and `r2`; this is not a separately frozen Cosmic exception ABI.
 
-- first `I64`: `r1:r2`
-- after one scalar in `r1`, the next `I64` skips to `r3:r4`
-- a pair that cannot fit completely in the remaining argument-register area is placed on the stack rather than split between registers and stack
+## Stack and frame layout
 
-Stack `I64` values are 8-byte aligned and occupy 8 bytes, low word at the lower address.
+The stack grows downward. Call-boundary stack alignment is 8 bytes. There is no red zone or shadow space in the implemented ABI.
 
-### Hidden structure return pointer
+Cranelift's generic ABI tracks these frame regions separately: incoming arguments, tail arguments, setup area, callee-save clobber area, fixed frame storage, stack slots, and outgoing arguments. Fixed frame storage and outgoing-argument storage are rounded to 8 bytes.
 
-A hidden structure-return (`sret`) pointer is an ordinary first ABI argument for placement purposes and therefore consumes `r1` when available. User arguments then begin at the next location.
+For a function that makes regular calls, the SIA setup area is exactly 8 bytes. The prologue emits `sp -= 8` and saves incoming `lr` (`r14`) at `[sp + 0]`; the other four bytes are padding. The epilogue reloads `lr` from `[sp + 0]` and emits `sp += 8`.
 
-The initial backend does not synthesize arbitrary by-value aggregate calling conventions. Aggregates are passed indirectly or returned through `sret` until a future ABI revision explicitly adds aggregate classification rules.
+Used callee-saved registers among `r9`, `r10`, `r11`, `r15` are sorted by register number and saved in a separate clobber area. Its size is `4 * count`, rounded to 8 bytes. Clobber save decrements `sp` by that area and stores registers at offsets `0,4,...`; clobber restore performs the inverse and restores `sp`.
 
-## Return values
+Integer regalloc spills consume one Cranelift spill slot. Stack-address and large-offset details are emitter implementation details and must preserve the layout above.
 
-- one scalar integer/pointer result: `r1`
-- one `I64` result: `r1:r2`, low word in `r1`, high word in `r2`
-- additional return values are assigned by the same ABI machinery to subsequent return locations where representable; excessive returns require Cranelift's stack-return-area mechanism
+## Calls and link register
 
-When Cranelift uses an implicit stack return area, the pointer is carried as a hidden argument according to the same argument-placement rules.
+Architectural calls use `r14` as the link register. The ABI marks `r14` clobbered by a call; a function that itself makes regular calls therefore preserves its incoming `lr` in the 8-byte setup area described above.
 
-## Volatility
+Direct/external call relocation and long-call encoding are emitter/object-format work and are not yet complete. Tail calls are not implemented by this initial ABI.
 
-Caller-saved registers:
+## Deliberately unsupported behavior
 
-`r1, r2, r3, r4, r5, r6, r7, r8`
+The implemented ABI deliberately does not provide:
 
-Callee-saved registers:
-
-`r9, r10, r11, r15`
-
-Special registers:
-
-- `r12` is scratch and may be clobbered by backend-generated expansion code.
-- `r13` is `sp` and must be restored to its incoming value on normal return.
-- `r14` is `lr`; a non-leaf function must preserve the incoming return address before a nested call and restore it before return.
-- `r0` is immutable zero.
-
-## Stack
-
-- stack grows downward
-- public call-boundary alignment: 8 bytes
-- scalar stack slot: 4 bytes
-- `I64` stack slot: 8 bytes, aligned to 8 bytes
-- no red zone
-- no shadow space
-- no callee-pop convention; callers and callees obey normal frame ownership
-- fixed stack slots and spills are rounded according to the value representation above
-
-The initial backend reserves no mandatory frame record. A frame pointer is optional; when used it is `r15` and must be preserved because `r15` is callee-saved.
-
-## Prologue / epilogue contract
-
-The backend's generic ABI layer computes a frame containing, as needed:
-
-1. outgoing/fixed stack requirements supplied by Cranelift,
-2. spill slots,
-3. save slots for used callee-saved registers,
-4. an `lr` save slot when the function may make a call / otherwise needs the incoming link value preserved.
-
-The prologue:
-
-1. decrements `sp` by the aligned frame size,
-2. saves required callee-saved GPRs,
-3. saves `lr` when required,
-4. performs any enabled stack-limit check using reserved `r12` as the temporary rather than an allocatable register.
-
-The epilogue performs the inverse sequence and returns through the restored `lr`.
-
-Large stack adjustments and out-of-range stack addresses are emitter pseudos and may expand through `r12`; they are not allowed to alter the ABI-visible value of another GPR.
-
-## Calls
-
-- direct and indirect calls use `r14` as the architectural link register.
-- call operands/returns follow the register assignments above.
-- call clobbers include the caller-saved register set and backend-reserved scratch behavior.
-- external/direct-call relocation encoding is part of the emitter/object work and is not yet a completed ABI mechanism at the time this document was written.
-- tail calls are not part of the initial ABI.
-
-## Unsupported / deliberately deferred ABI features
-
-The current ABI does not define:
-
-- floating-point register arguments or returns
-- vector arguments or returns
-- by-value aggregate classification beyond indirect/sret handling
-- variadic argument register-save areas
+- floating-point or vector arguments/returns
+- I128 values
+- by-value aggregate classification
+- automatic aggregate memcpy
+- variadic register-save areas
 - tail-call ABI
-- red zone
-- stack probing policy beyond the backend's generic stack-limit hook
+- stack probing (`gen_probestack` and inline probing currently fail if requested)
 - TLS ABI
-- unwind/DWARF register numbering contract
-- exception ABI
+- unwind/DWARF register numbering
+- a separately frozen exception ABI
 
-Unsupported cases must fail explicitly; another ISA's ABI must never be used as fallback behavior.
+`r12` is exposed to the backend as the return-value temporary and is reserved from regalloc. Although a stack-limit register hook currently returns `r12`, stack probing/check generation is not implemented and this must not be interpreted as an active stack-limit ABI.
 
-## Stability rule
+## ABI stability boundary
 
-Changes to any of the following are ABI changes and require deliberate versioning plus Forge/Cosmic conformance updates:
+Changing argument registers, the `r1:r2` return area, caller/callee-save sets, special roles of `r12..r15`, stack alignment, I64 pair ordering/alignment, or hidden return-area-pointer placement is an ABI change and requires a deliberate Forge/Cosmic compatibility update.
 
-- argument registers
-- return registers
-- caller/callee-save sets
-- `r12/r13/r14/r15` special roles
-- stack alignment
-- I64 pair ordering/alignment
-- hidden `sret` placement
-- aggregate classification
-
-Emitter implementation details such as literal-island placement, branch veneers, and the exact instruction sequence used for large immediates are not ABI-visible so long as they preserve this contract.
+Literal-pool placement, branch veneers, constant-building sequences, and other emitter choices are not ABI-visible provided they preserve this contract.
