@@ -27,7 +27,7 @@ jobs:
           cargo check -p cranelift-frontend
           cargo check -p cranelift-module
           cargo check -p cranelift-native
-      - name: Test SIA32 target, ABI contract and exact encoder
+      - name: Test focused SIA32 backend code
         run: |
-          cargo test -p cranelift-codegen --lib isa::sia32::abi_contract --no-default-features --features std,sia32
+          cargo test -p cranelift-codegen --lib isa::sia32 --no-default-features --features std,sia32
           cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std,sia32
