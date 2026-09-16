@@ -16,6 +16,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check SIA target lexicon compatibility
         run: cargo test -p target-lexicon@0.13.5-sia.1
+      # This compiles the registered SIA32 backend alongside retained native backends.
       - name: Check retained Cranelift workspace and SIA registration
         run: |
           cargo check -p cranelift-codegen --no-default-features --features std,arm64,riscv64,sia32
