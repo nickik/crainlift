@@ -2,7 +2,7 @@ name: Forge Cranelift
 
 on:
   push:
-    branches: [forge-minimal, sia32-backend, sia32-m8-relocations, sia32-m7-isa-facilities]
+    branches: [forge-minimal, sia32-backend, sia32-m8-relocations, sia32-m7-isa-facilities, sia32-m6-i64-prep]
   workflow_dispatch:
 
 concurrency:
