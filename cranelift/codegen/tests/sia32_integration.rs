@@ -32,12 +32,12 @@ fn sia32_triple_lookup_does_not_alias_an_existing_backend() {
 #[test]
 fn independent_sia32_build_does_not_enable_riscv64() {
     let triple: Triple = "riscv64-unknown-none".parse().unwrap();
-    assert_eq!(isa::lookup(triple).unwrap_err(), LookupError::SupportDisabled);
+    assert!(matches!(isa::lookup(triple), Err(LookupError::SupportDisabled)));
 }
 
 #[cfg(not(feature = "arm64"))]
 #[test]
 fn independent_sia32_build_does_not_enable_arm64() {
     let triple: Triple = "aarch64-unknown-none".parse().unwrap();
-    assert_eq!(isa::lookup(triple).unwrap_err(), LookupError::SupportDisabled);
+    assert!(matches!(isa::lookup(triple), Err(LookupError::SupportDisabled)));
 }
