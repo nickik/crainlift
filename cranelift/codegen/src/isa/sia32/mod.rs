@@ -9,10 +9,13 @@ use crate::ir::{self, Function, Type};
 use crate::isa::{
     Builder as IsaBuilder, FunctionAlignment, IsaFlagsHashKey, OwnedTargetIsa, TargetIsa,
 };
-use crate::machinst::{CompiledCodeStencil, Reg, TextSectionBuilder};
+use crate::machinst::CompiledCode;
+use crate::machinst::{
+    CompiledCodeStencil, MachInst, MachTextSectionBuilder, Reg, SigSet, TextSectionBuilder,
+    VCode, compile,
+};
 use crate::result::CodegenResult;
 use crate::settings::{self as shared_settings, Flags};
-use crate::CodegenError;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
@@ -55,20 +58,55 @@ impl Sia32Backend {
     ) -> Self {
         Self { triple, flags, isa_flags }
     }
+
+    /// Lower, allocate, and finalize a function using the normal MachInst
+    /// pipeline. SIA32 intentionally uses no additional emitter information.
+    fn compile_vcode(
+        &self,
+        func: &Function,
+        domtree: &DominatorTree,
+        regalloc_ctx: &mut regalloc2::Ctx,
+        ctrl_plane: &mut ControlPlane,
+    ) -> CodegenResult<VCode<inst::Inst>> {
+        let sigs = SigSet::new::<abi::Sia32MachineDeps>(func, &self.flags)?;
+        let abi = abi::Sia32Callee::new(func, self, &self.isa_flags, &sigs)?;
+        compile::compile::<Sia32Backend>(
+            func,
+            domtree,
+            regalloc_ctx,
+            self,
+            abi,
+            (),
+            sigs,
+            ctrl_plane,
+        )
+    }
 }
 
 impl TargetIsa for Sia32Backend {
     fn compile_function(
         &self,
-        _func: &Function,
-        _domtree: &DominatorTree,
-        _regalloc_ctx: &mut regalloc2::Ctx,
-        _want_disasm: bool,
-        _ctrl_plane: &mut ControlPlane,
+        func: &Function,
+        domtree: &DominatorTree,
+        regalloc_ctx: &mut regalloc2::Ctx,
+        want_disasm: bool,
+        ctrl_plane: &mut ControlPlane,
     ) -> CodegenResult<CompiledCodeStencil> {
-        Err(CodegenError::Unsupported(
-            "SIA32 target is registered, but CLIF lowering is not implemented yet".into(),
-        ))
+        let vcode = self.compile_vcode(func, domtree, regalloc_ctx, ctrl_plane)?;
+        let want_disasm = want_disasm || log::log_enabled!(log::Level::Debug);
+        let emit_result = vcode.emit(&regalloc_ctx.output, want_disasm, &self.flags, ctrl_plane)?;
+
+        if let Some(disasm) = emit_result.disasm.as_ref() {
+            log::debug!("disassembly:\n{disasm}");
+        }
+
+        Ok(CompiledCodeStencil(CompiledCode {
+            buffer: emit_result.buffer,
+            vcode: emit_result.disasm,
+            value_labels_ranges: emit_result.value_labels_ranges,
+            bb_starts: emit_result.bb_offsets,
+            bb_edges: emit_result.bb_edges,
+        }))
     }
 
     fn name(&self) -> &'static str { "sia32" }
@@ -87,12 +125,12 @@ impl TargetIsa for Sia32Backend {
         Ok(None)
     }
 
-    fn text_section_builder(&self, _num_labeled_funcs: usize) -> Box<dyn TextSectionBuilder> {
-        panic!("SIA32 text-section building requires the completed M3 emitter")
+    fn text_section_builder(&self, num_funcs: usize) -> Box<dyn TextSectionBuilder> {
+        Box::new(MachTextSectionBuilder::<inst::Inst>::new(num_funcs))
     }
 
     fn function_alignment(&self) -> FunctionAlignment {
-        FunctionAlignment { minimum: 2, preferred: 4 }
+        inst::Inst::function_alignment()
     }
 
     fn page_size_align_log2(&self) -> u8 { 11 }
