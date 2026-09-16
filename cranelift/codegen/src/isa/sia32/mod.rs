@@ -21,7 +21,13 @@ use core::fmt;
 use cranelift_control::ControlPlane;
 use target_lexicon::{Architecture, Triple};
 
+// The exact encoder and architectural-register model are currently exposed for
+// conformance tests while the MachInst layer is being built. Their individual
+// helpers are intentionally documented by the SIA architectural reference
+// rather than duplicating hundreds of one-line rustdoc comments here.
+#[allow(missing_docs)]
 pub mod encode;
+#[allow(missing_docs)]
 pub mod regs;
 mod settings;
 
@@ -33,6 +39,7 @@ pub struct Sia32Backend {
 }
 
 impl Sia32Backend {
+    /// Create a SIA32 backend from a target triple and resolved shared/ISA flags.
     pub fn new_with_flags(
         triple: Triple,
         flags: shared_settings::Flags,
@@ -164,6 +171,7 @@ impl fmt::Display for Sia32Backend {
     }
 }
 
+/// Create an ISA builder for a SIA32 target triple.
 pub fn isa_builder(triple: Triple) -> IsaBuilder {
     match triple.architecture {
         Architecture::Sia32 => {}
