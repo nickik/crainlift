@@ -64,6 +64,11 @@ impl MachInstLabelUse for LabelUse {
         }
     }
 
+    fn patch_size(self) -> CodeOffset {
+        let _ = self;
+        2
+    }
+
     fn patch(self, buffer: &mut [u8], use_offset: CodeOffset, label_offset: CodeOffset) {
         assert!(buffer.len() >= 2);
         let old = Self::read_word(buffer);
@@ -165,5 +170,7 @@ mod tests {
         assert_eq!(LabelUse::Cond7.max_neg_range(), 126);
         assert_eq!(LabelUse::Branch11.max_pos_range(), 2048);
         assert_eq!(LabelUse::Branch11.max_neg_range(), 2046);
+        assert_eq!(LabelUse::Cond7.patch_size(), 2);
+        assert_eq!(LabelUse::Literal8.patch_size(), 2);
     }
 }
