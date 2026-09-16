@@ -7,6 +7,12 @@
 
 (type MInst
   (enum
+    (Mov
+      (dst WritableReg)
+      (src Reg))
+    (StackAddr
+      (dst WritableReg)
+      (mem StackAMode))
     (LoadConst32
       (dst WritableReg)
       (value u32))
