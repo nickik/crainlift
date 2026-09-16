@@ -87,6 +87,6 @@ enable-serde = [
     "smallvec/serde",
 ]
 incremental-cache = ["enable-serde", "postcard", "sha2"]
-souper-harvest = ["souper-ir"]
+souper-harvest = ["souper-ir", "souper-ir/stringify"]
 isle-errors = ["cranelift-isle/fancy-errors"]
 timing = []
