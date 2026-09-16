@@ -16,11 +16,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check SIA target lexicon compatibility
         run: cargo test -p target-lexicon@0.13.5-sia.1
-      - name: Check retained Cranelift workspace
+      - name: Check retained Cranelift workspace and SIA registration
         run: |
-          cargo check -p cranelift-codegen --no-default-features --features std,arm64,riscv64
+          cargo check -p cranelift-codegen --no-default-features --features std,arm64,riscv64,sia32
           cargo check -p cranelift-frontend
           cargo check -p cranelift-module
           cargo check -p cranelift-native
-      - name: Test SIA32 exact encoder
-        run: cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std
+      - name: Test SIA32 target and exact encoder
+        run: cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std,sia32

@@ -73,6 +73,9 @@ pub mod aarch64;
 #[cfg(feature = "riscv64")]
 pub mod riscv64;
 
+#[cfg(feature = "sia32")]
+pub mod sia32;
+
 #[cfg(feature = "s390x")]
 mod s390x;
 
@@ -113,6 +116,7 @@ pub fn lookup(triple: Triple) -> Result<Builder, LookupError> {
         Architecture::Aarch64 { .. } => isa_builder!(aarch64, (feature = "arm64"), triple),
         Architecture::S390x { .. } => isa_builder!(s390x, (feature = "s390x"), triple),
         Architecture::Riscv64 { .. } => isa_builder!(riscv64, (feature = "riscv64"), triple),
+        Architecture::Sia32 => isa_builder!(sia32, (feature = "sia32"), triple),
         Architecture::Pulley32 | Architecture::Pulley32be => {
             isa_builder!(pulley32, (feature = "pulley"), triple)
         }
@@ -126,7 +130,7 @@ pub fn lookup(triple: Triple) -> Result<Builder, LookupError> {
 /// The string names of all the supported, but possibly not enabled, architectures. The elements of
 /// this slice are suitable to be passed to the [lookup_by_name] function to obtain the default
 /// configuration for that architecture.
-pub const ALL_ARCHITECTURES: &[&str] = &["x86_64", "aarch64", "s390x", "riscv64"];
+pub const ALL_ARCHITECTURES: &[&str] = &["x86_64", "aarch64", "s390x", "riscv64", "sia32"];
 
 /// Look for a supported ISA with the given `name`.
 /// Return a builder that can create a corresponding `TargetIsa`.
@@ -166,7 +170,7 @@ pub type OwnedTargetIsa = Arc<dyn TargetIsa>;
 pub type Builder = IsaBuilder<CodegenResult<OwnedTargetIsa>>;
 
 /// Builder for a `TargetIsa`.
-/// Modify the ISA-specific settings before creating the `TargetIsa` trait object with `finish`.
+/// Modify the ISA-specific settings before creating the `TargetIsa` trait object.
 #[derive(Clone)]
 pub struct IsaBuilder<T> {
     triple: Triple,
@@ -193,8 +197,8 @@ impl<T> IsaBuilder<T> {
     /// Creates a new [Builder] from a [TargetIsa], copying all flags in the
     /// process.
     pub fn from_target_isa(target_isa: &dyn TargetIsa) -> Builder {
-        // We should always be able to find the builder for the TargetISA, since presumably we
-        // also generated the previous TargetISA at some point
+        // We should always be able to find the builder for the TargetISA, since presumably
+        // we also generated the previous TargetISA at some point.
         let triple = target_isa.triple().clone();
         let mut builder = self::lookup(triple).expect("Could not find triple for target ISA");
 
@@ -216,12 +220,8 @@ impl<T> IsaBuilder<T> {
         self.setup.iter()
     }
 
-    /// Combine the ISA-specific settings with the provided
-    /// ISA-independent settings and allocate a fully configured
-    /// `TargetIsa` trait object. May return an error if some of the
-    /// flags are inconsistent or incompatible: for example, some
-    /// platform-independent features, like general SIMD support, may
-    /// need certain ISA extensions to be enabled.
+    /// Combine the ISA-specific settings with the provided ISA-independent
+    /// settings and allocate a fully configured TargetIsa trait object.
     pub fn finish(&self, shared_flags: settings::Flags) -> T {
         (self.constructor)(self.triple.clone(), shared_flags, &self.setup)
     }
@@ -255,9 +255,6 @@ pub struct TargetFrontendConfig {
     pub pointer_width: PointerWidth,
 
     /// The log2 of the target's page size and alignment.
-    ///
-    /// Note that this may be an upper-bound that is larger than necessary for
-    /// some platforms since it may depend on runtime configuration.
     pub page_size_align_log2: u8,
 }
 
@@ -325,8 +322,6 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
     }
 
     /// Creates unwind information for the function.
-    ///
-    /// Returns `None` if there is no unwind information for the function.
     #[cfg(feature = "unwind")]
     fn emit_unwind_info(
         &self,
@@ -335,33 +330,18 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
     ) -> CodegenResult<Option<crate::isa::unwind::UnwindInfo>>;
 
     /// Creates a new System V Common Information Entry for the ISA.
-    ///
-    /// Returns `None` if the ISA does not support System V unwind information.
     #[cfg(feature = "unwind")]
     fn create_systemv_cie(&self) -> Option<gimli::write::CommonInformationEntry> {
-        // By default, an ISA cannot create a System V CIE
         None
     }
 
-    /// Returns an object that can be used to build the text section of an
-    /// executable.
-    ///
-    /// This object will internally attempt to handle as many relocations as
-    /// possible using relative calls/jumps/etc between functions.
-    ///
-    /// The `num_labeled_funcs` argument here is the number of functions which
-    /// will be "labeled" or might have calls between them, typically the number
-    /// of defined functions in the object file.
+    /// Returns an object that can be used to build the text section of an executable.
     fn text_section_builder(&self, num_labeled_funcs: usize) -> Box<dyn TextSectionBuilder>;
 
-    /// Returns the minimum function alignment and the preferred function
-    /// alignment, for performance, required by this ISA.
+    /// Returns the minimum function alignment and preferred function alignment.
     fn function_alignment(&self) -> FunctionAlignment;
 
     /// The log2 of the target's page size and alignment.
-    ///
-    /// Note that this may be an upper-bound that is larger than necessary for
-    /// some platforms since it may depend on runtime configuration.
     fn page_size_align_log2(&self) -> u8;
 
     /// Create a polymorphic TargetIsa from this specific implementation.
@@ -372,50 +352,34 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
         Arc::new(self)
     }
 
-    /// Generate a `Capstone` context for disassembling bytecode for this architecture.
+    /// Generate a Capstone context for disassembling bytecode for this architecture.
     #[cfg(feature = "disas")]
     fn to_capstone(&self) -> Result<capstone::Capstone, capstone::Error> {
         Err(capstone::Error::UnsupportedArch)
     }
 
-    /// Return the string representation of "reg" accessed as "size" bytes.
-    /// The returned string will match the usual disassemly view of "reg".
+    /// Return the string representation of `reg` accessed as `size` bytes.
     fn pretty_print_reg(&self, reg: Reg, size: u8) -> String;
 
-    /// Returns whether this ISA has a native fused-multiply-and-add instruction
-    /// for floats.
-    ///
-    /// Currently this only returns false on x86 when some native features are
-    /// not detected.
+    /// Returns whether this ISA has a native fused-multiply-and-add instruction for floats.
     fn has_native_fma(&self) -> bool;
 
-    /// Returns whether this ISA has instructions for `ceil`, `floor`, etc.
+    /// Returns whether this ISA has instructions for ceil/floor/etc.
     fn has_round(&self) -> bool;
 
-    /// Returns whether the CLIF `blendv` instruction is implemented for
-    /// this ISA for the specified type.
+    /// Returns whether the CLIF blendv instruction is implemented for this ISA.
     fn has_blendv_lowering(&self, ty: Type) -> bool;
 
-    /// Returns whether the CLIF `x86_pshufb` instruction is implemented for
-    /// this ISA.
+    /// Returns whether the CLIF x86_pshufb instruction is implemented for this ISA.
     fn has_x86_pshufb_lowering(&self) -> bool;
 
-    /// Returns whether the CLIF `x86_pmulhrsw` instruction is implemented for
-    /// this ISA.
+    /// Returns whether the CLIF x86_pmulhrsw instruction is implemented for this ISA.
     fn has_x86_pmulhrsw_lowering(&self) -> bool;
 
-    /// Returns whether the CLIF `x86_pmaddubsw` instruction is implemented for
-    /// this ISA.
+    /// Returns whether the CLIF x86_pmaddubsw instruction is implemented for this ISA.
     fn has_x86_pmaddubsw_lowering(&self) -> bool;
 
-    /// Returns the mode of extension used for integer arguments smaller than
-    /// the pointer width in function signatures.
-    ///
-    /// Some platform ABIs require that smaller-than-pointer-width values are
-    /// either zero or sign-extended to the full register width. This value is
-    /// propagated to the `AbiParam` value created for signatures. Note that not
-    /// all ABIs for all platforms require extension of any form, so this is
-    /// generally only necessary for the `default_call_conv`.
+    /// Returns the mode of extension used for integer arguments smaller than the pointer width.
     fn default_argument_extension(&self) -> ir::ArgumentExtension;
 }
 
@@ -423,20 +387,16 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
 #[derive(Hash)]
 pub struct IsaFlagsHashKey<'a>(&'a [u8]);
 
-/// Function alignment specifications as required by an ISA, returned by
-/// [`TargetIsa::function_alignment`].
+/// Function alignment specifications as required by an ISA.
 #[derive(Copy, Clone)]
 pub struct FunctionAlignment {
-    /// The minimum alignment required by an ISA, where all functions must be
-    /// aligned to at least this amount.
+    /// Minimum required alignment.
     pub minimum: u32,
-    /// A "preferred" alignment which should be used for more
-    /// performance-sensitive situations. This can involve cache-line-aligning
-    /// for example to get more of a small function into fewer cache lines.
+    /// Preferred alignment.
     pub preferred: u32,
 }
 
-/// Methods implemented for free for target ISA!
+/// Methods implemented for free for target ISA.
 impl<'a> dyn TargetIsa + 'a {
     /// Get the default calling convention of this target.
     pub fn default_call_conv(&self) -> CallConv {
@@ -454,8 +414,8 @@ impl<'a> dyn TargetIsa + 'a {
     /// Returns the minimum symbol alignment for this ISA.
     pub fn symbol_alignment(&self) -> u64 {
         match self.triple().architecture {
-            // All symbols need to be aligned to at least 2 on s390x.
             Architecture::S390x => 2,
+            Architecture::Sia32 => 2,
             _ => 1,
         }
     }
@@ -470,17 +430,17 @@ impl<'a> dyn TargetIsa + 'a {
         self.triple().pointer_width().unwrap()
     }
 
-    /// Get the width of pointers on this ISA, in units of bits.
+    /// Get the width of pointers on this ISA, in bits.
     pub fn pointer_bits(&self) -> u8 {
         self.pointer_width().bits()
     }
 
-    /// Get the width of pointers on this ISA, in units of bytes.
+    /// Get the width of pointers on this ISA, in bytes.
     pub fn pointer_bytes(&self) -> u8 {
         self.pointer_width().bytes()
     }
 
-    /// Get the information needed by frontends producing Cranelift IR.
+    /// Get information needed by frontends producing Cranelift IR.
     pub fn frontend_config(&self) -> TargetFrontendConfig {
         TargetFrontendConfig {
             default_call_conv: self.default_call_conv(),

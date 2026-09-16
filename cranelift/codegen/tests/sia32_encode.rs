@@ -1,10 +1,28 @@
-#[path = "../src/isa/sia32/mod.rs"]
-mod sia32;
-
-use sia32::{encode as e, regs::Reg};
+use cranelift_codegen::isa;
+use cranelift_codegen::isa::sia32::{self, encode as e, regs::Reg};
+use cranelift_codegen::settings;
+use target_lexicon::{Endianness, PointerWidth, Triple};
 
 fn r(index: u8) -> Reg {
     Reg::new(index).unwrap()
+}
+
+#[test]
+fn sia32_target_lookup_reports_frozen_frontend_properties() {
+    let triple: Triple = "sia32-unknown-none".parse().unwrap();
+    let builder = isa::lookup(triple).expect("SIA32 backend must be registered");
+    let shared = settings::Flags::new(settings::builder());
+    let target = builder.finish(shared).expect("SIA32 backend must construct");
+
+    assert_eq!(target.name(), "sia32");
+    assert_eq!(target.triple().pointer_width(), Ok(PointerWidth::U32));
+    assert_eq!(target.triple().endianness(), Ok(Endianness::Little));
+    assert_eq!(target.pointer_bits(), 32);
+    assert_eq!(target.pointer_bytes(), 4);
+    assert_eq!(target.frontend_config().page_size_align_log2, 11);
+    assert_eq!(target.function_alignment().minimum, 2);
+    assert_eq!(target.function_alignment().preferred, 4);
+    assert!(isa::ALL_ARCHITECTURES.contains(&"sia32"));
 }
 
 #[test]
