@@ -5,6 +5,8 @@
 //! `ABIMachineSpec` implementation must match once calls and stack frames are
 //! wired into the backend.
 
+use alloc::vec::Vec;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ValueKind {
     I8,
@@ -133,13 +135,13 @@ pub(crate) fn place_rets(kinds: &[ValueKind]) -> Option<Placement> {
     let values = match kinds {
         [] => Vec::new(),
         [ValueKind::I8 | ValueKind::I16 | ValueKind::I32 | ValueKind::Ptr32] => {
-            vec![Location::Reg(1)]
+            alloc::vec![Location::Reg(1)]
         }
-        [ValueKind::I64] => vec![Location::RegPair { low: 1, high: 2 }],
+        [ValueKind::I64] => alloc::vec![Location::RegPair { low: 1, high: 2 }],
         [
             ValueKind::I8 | ValueKind::I16 | ValueKind::I32 | ValueKind::Ptr32,
             ValueKind::I8 | ValueKind::I16 | ValueKind::I32 | ValueKind::Ptr32,
-        ] => vec![Location::Reg(1), Location::Reg(2)],
+        ] => alloc::vec![Location::Reg(1), Location::Reg(2)],
         _ => return None,
     };
 
@@ -152,6 +154,7 @@ pub(crate) fn place_rets(kinds: &[ValueKind]) -> Option<Placement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn six_scalar_args_fill_r1_through_r6() {
