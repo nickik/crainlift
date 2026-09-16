@@ -64,7 +64,10 @@ pub const fn stack_reg() -> MachReg { mach_reg(Reg::SP.index()) }
 pub const fn link_reg() -> MachReg { mach_reg(Reg::LR.index()) }
 pub const fn fp_reg() -> MachReg { mach_reg(Reg::FP.index()) }
 pub const fn scratch_reg() -> MachReg { mach_reg(Reg::SCRATCH.index()) }
-pub const fn stacklimit_reg() -> MachReg { mach_reg(8) }
+/// Fixed temporary used by generic stack-limit/prologue machinery.
+/// It aliases the backend scratch register so it can never conflict with an
+/// allocated SSA value.
+pub const fn stacklimit_reg() -> MachReg { scratch_reg() }
 
 pub fn writable_zero_reg() -> Writable<MachReg> { Writable::from_reg(zero_reg()) }
 pub fn writable_stack_reg() -> Writable<MachReg> { Writable::from_reg(stack_reg()) }
