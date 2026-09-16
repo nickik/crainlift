@@ -30,6 +30,8 @@ mod reloc;
 #[allow(missing_docs)]
 pub mod encode;
 #[allow(missing_docs)]
+pub mod m7;
+#[allow(missing_docs)]
 pub mod regs;
 mod settings;
 
@@ -77,68 +79,34 @@ impl TargetIsa for Sia32Backend {
         &self,
         _result: &crate::machinst::CompiledCode,
         _kind: crate::isa::unwind::UnwindInfoKind,
-    ) -> CodegenResult<Option<crate::isa::unwind::UnwindInfo>> {
-        Ok(None)
-    }
+    ) -> CodegenResult<Option<crate::isa::unwind::UnwindInfo>> { Ok(None) }
 
-    fn text_section_builder(&self, _num_labeled_funcs: usize) -> Box<dyn TextSectionBuilder> {
-        panic!("SIA32 text-section building requires the completed M3 emitter")
-    }
-
-    fn function_alignment(&self) -> FunctionAlignment {
-        FunctionAlignment { minimum: 2, preferred: 4 }
-    }
-
+    fn text_section_builder(&self, _num_labeled_funcs: usize) -> Box<dyn TextSectionBuilder> { panic!("SIA32 text-section building requires the completed M3 emitter") }
+    fn function_alignment(&self) -> FunctionAlignment { FunctionAlignment { minimum: 2, preferred: 4 } }
     fn page_size_align_log2(&self) -> u8 { 11 }
-
     fn pretty_print_reg(&self, reg: Reg, _size: u8) -> String {
-        match reg.to_real_reg() {
-            Some(real) => match real.hw_enc() {
-                13 => "sp".into(),
-                14 => "lr".into(),
-                n if n < 16 => format!("r{n}"),
-                _ => format!("{reg:?}"),
-            },
-            None => format!("{reg:?}"),
-        }
+        match reg.to_real_reg() { Some(real) => match real.hw_enc() { 13 => "sp".into(), 14 => "lr".into(), n if n < 16 => format!("r{n}"), _ => format!("{reg:?}"), }, None => format!("{reg:?}"), }
     }
-
     fn has_native_fma(&self) -> bool { false }
     fn has_round(&self) -> bool { false }
     fn has_blendv_lowering(&self, _ty: Type) -> bool { false }
     fn has_x86_pshufb_lowering(&self) -> bool { false }
     fn has_x86_pmulhrsw_lowering(&self) -> bool { false }
     fn has_x86_pmaddubsw_lowering(&self) -> bool { false }
-
-    fn default_argument_extension(&self) -> ir::ArgumentExtension {
-        ir::ArgumentExtension::None
-    }
+    fn default_argument_extension(&self) -> ir::ArgumentExtension { ir::ArgumentExtension::None }
 }
 
 impl fmt::Display for Sia32Backend {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("MachBackend")
-            .field("name", &self.name())
-            .field("triple", &self.triple())
-            .field("flags", &format!("{}", self.flags()))
-            .finish()
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.debug_struct("MachBackend").field("name", &self.name()).field("triple", &self.triple()).field("flags", &format!("{}", self.flags())).finish() }
 }
 
 /// Create an ISA builder for a SIA32 target triple.
 pub fn isa_builder(triple: Triple) -> IsaBuilder {
-    match triple.architecture {
-        Architecture::Sia32 => {}
-        _ => unreachable!(),
-    }
+    match triple.architecture { Architecture::Sia32 => {}, _ => unreachable!(), }
     IsaBuilder { triple, setup: settings::builder(), constructor: isa_constructor }
 }
 
-fn isa_constructor(
-    triple: Triple,
-    shared_flags: Flags,
-    builder: &shared_settings::Builder,
-) -> CodegenResult<OwnedTargetIsa> {
+fn isa_constructor(triple: Triple, shared_flags: Flags, builder: &shared_settings::Builder) -> CodegenResult<OwnedTargetIsa> {
     let isa_flags = settings::Flags::new(&shared_flags, builder);
     Ok(Sia32Backend::new_with_flags(triple, shared_flags, isa_flags).wrapped())
 }
