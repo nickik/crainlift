@@ -17,6 +17,7 @@ use crate::machinst::{
     MachInstEmitState, MachLabel, MachTerminator, OperandVisitor, Reg, RetPair, StackAMode,
     Writable,
 };
+use crate::machinst::reg::OperandVisitorImpl;
 use crate::{CodegenError, CodegenResult};
 use alloc::boxed::Box;
 use alloc::format;
