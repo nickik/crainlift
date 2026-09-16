@@ -23,6 +23,7 @@ use target_lexicon::{Architecture, Triple};
 
 mod abi;
 mod abi_contract;
+mod i64_prep;
 mod inst;
 mod inst_abi_compat;
 mod label;
