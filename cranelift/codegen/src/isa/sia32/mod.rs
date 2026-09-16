@@ -32,8 +32,10 @@ pub mod encode;
 pub mod regs;
 mod settings;
 
-/// Native SIA32 target backend.
-pub struct Sia32Backend {
+/// Native SIA32 target backend. Consumers obtain it through `isa_builder` as a
+/// `TargetIsa`; the concrete MachInst type is intentionally an implementation
+/// detail of cranelift-codegen.
+pub(crate) struct Sia32Backend {
     triple: Triple,
     flags: shared_settings::Flags,
     isa_flags: settings::Flags,
@@ -41,7 +43,7 @@ pub struct Sia32Backend {
 
 impl Sia32Backend {
     /// Create a SIA32 backend from a target triple and resolved shared/ISA flags.
-    pub fn new_with_flags(
+    pub(crate) fn new_with_flags(
         triple: Triple,
         flags: shared_settings::Flags,
         isa_flags: settings::Flags,
