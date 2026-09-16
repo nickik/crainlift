@@ -31,6 +31,7 @@ jobs:
         run: |
           cargo test -p cranelift-codegen --lib isa::sia32 --no-default-features --features std,sia32
           cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std,sia32
+          cargo test -p cranelift-codegen --test sia32_production --no-default-features --features std,sia32
       - name: Check aggregate native architecture build includes SIA32
         run: cargo check -p cranelift-codegen --no-default-features --features std,all-native-arch
 

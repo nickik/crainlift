@@ -167,7 +167,8 @@ elif [[ -f "$ROOT/cranelift/codegen/src/isa/sia32/lower.isle" ]]; then
     echo "warning: lower.isle exists but isle_sia32.rs was not generated; check SIA32 ISLE registration" >&2
 fi
 
-LOWERING_TEST="$ROOT/cranelift/codegen/tests/sia32_lowering.rs"
+LOWERING_TEST="$ROOT/cranelift/codegen/tests/sia32_production.rs"
+LOWERING_TEST_NAME="sia32_production"
 
 if [[ -n "$PROBE" ]]; then
     if [[ ! -f "$LOWERING_TEST" ]]; then
@@ -181,16 +182,16 @@ if [[ -n "$PROBE" ]]; then
     fi
     run_stage "lowering probe: $PROBE" \
         env CARGO_TARGET_DIR="$TARGET_DIR" RUST_LOG="${RUST_LOG:-}" \
-        cargo test -p cranelift-codegen --test sia32_lowering --no-default-features \
+        cargo test -p cranelift-codegen --test "$LOWERING_TEST_NAME" --no-default-features \
             --features "$FEATURES" "$PROBE" -- --exact --nocapture
 else
     if [[ -f "$LOWERING_TEST" ]]; then
         run_stage "focused lowering probes" \
             env CARGO_TARGET_DIR="$TARGET_DIR" \
-            cargo test -p cranelift-codegen --test sia32_lowering --no-default-features \
+            cargo test -p cranelift-codegen --test "$LOWERING_TEST_NAME" --no-default-features \
                 --features "$FEATURES"
     else
-        echo "PENDING: focused lowering probes (sia32_lowering.rs not added yet)"
+        echo "PENDING: focused production lowering probes (sia32_production.rs not added yet)"
     fi
 fi
 
@@ -228,7 +229,7 @@ for stage in "${PASSED[@]}"; do
     printf 'PASS  %s\n' "$stage"
 done
 if [[ ! -f "$LOWERING_TEST" ]]; then
-    echo "PEND  focused lowering probes"
+    echo "PEND  focused production lowering probes"
 fi
 echo "elapsed: $(elapsed)"
 echo "state: $STATE_DIR"
