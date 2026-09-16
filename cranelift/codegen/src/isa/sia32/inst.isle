@@ -5,6 +5,10 @@
 ;; Vec/Box variants and is intentionally not Copy. The lowering glue converts
 ;; this small R0-facing enum into the existing Rust MachineInst at emit time.
 
+;; StackAMode itself is a small copyable ABI descriptor from MachInst and is
+;; legitimately opaque to the SIA selection rules.
+(type StackAMode (primitive StackAMode))
+
 (type MInst
   (enum
     (Mov
