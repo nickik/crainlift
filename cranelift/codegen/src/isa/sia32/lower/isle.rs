@@ -8,7 +8,7 @@ use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
 use crate::machinst::isle::*;
 use crate::machinst::{
-    CallArgList, CallRetList, InstOutput, Lower, MachLabel, Reg, VCodeConstant,
+    CallArgList, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
     VCodeConstantData, VCodeInst,
 };
 use crate::{
@@ -51,66 +51,100 @@ impl<'a, 'b> Sia32IsleContext<'a, 'b> {
     }
 }
 
-fn into_machine_inst(inst: MInst) -> MachineInst {
+impl MInst {
+    // Required by the shared lowering prelude. Keep `ty` in the signature to
+    // match MachInst::gen_move even though SIA's scalar register move encoding
+    // is type-independent for the R0 integer subset.
+    fn gen_move(dst: WritableReg, src: Reg, _ty: Type) -> Self {
+        Self::Mov { dst, src }
+    }
+}
+
+impl From<MachineInst> for MInst {
+    fn from(inst: MachineInst) -> Self {
+        match inst {
+            MachineInst::Mov { dst, src } => Self::Mov { dst, src },
+            MachineInst::StackAddr { dst, mem } => Self::StackAddr { dst, mem },
+            other => panic!("SIA ISLE wrapper cannot represent shared-prelude instruction {other:?}"),
+        }
+    }
+}
+
+fn into_machine_inst(inst: &MInst) -> MachineInst {
     match inst {
-        MInst::LoadConst32 { dst, value } => MachineInst::LoadConst32 { dst, value },
-        MInst::Add { dst, lhs, rhs } => MachineInst::Add { dst, lhs, rhs },
+        MInst::Mov { dst, src } => MachineInst::Mov {
+            dst: *dst,
+            src: *src,
+        },
+        MInst::StackAddr { dst, mem } => MachineInst::StackAddr {
+            dst: *dst,
+            mem: *mem,
+        },
+        MInst::LoadConst32 { dst, value } => MachineInst::LoadConst32 {
+            dst: *dst,
+            value: *value,
+        },
+        MInst::Add { dst, lhs, rhs } => MachineInst::Add {
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
         MInst::Sub { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Sub,
-            dst,
-            lhs,
-            rhs,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::And { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::And,
-            dst,
-            lhs,
-            rhs,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::Or { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Or,
-            dst,
-            lhs,
-            rhs,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::Xor { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Xor,
-            dst,
-            lhs,
-            rhs,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::Shl { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Shl,
-            dst,
-            lhs,
-            rhs,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::Shr { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Shr,
-            dst,
-            lhs,
-            rhs,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::Sar { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Sar,
-            dst,
-            lhs,
-            rhs,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::Clz { dst, src } => MachineInst::Unary {
             op: UnaryOp::Clz,
-            dst,
-            src,
+            dst: *dst,
+            src: *src,
         },
         MInst::Ctz { dst, src } => MachineInst::Unary {
             op: UnaryOp::Ctz,
-            dst,
-            src,
+            dst: *dst,
+            src: *src,
         },
         MInst::Cpop { dst, src } => MachineInst::Unary {
             op: UnaryOp::Cpop,
-            dst,
-            src,
+            dst: *dst,
+            src: *src,
         },
         MInst::Extend {
             dst,
@@ -119,11 +153,11 @@ fn into_machine_inst(inst: MInst) -> MachineInst {
             from_bits,
             to_bits,
         } => MachineInst::Extend {
-            dst,
-            src,
-            signed,
-            from_bits,
-            to_bits,
+            dst: *dst,
+            src: *src,
+            signed: *signed,
+            from_bits: *from_bits,
+            to_bits: *to_bits,
         },
         MInst::LoadBaseOffset {
             dst,
@@ -131,10 +165,10 @@ fn into_machine_inst(inst: MInst) -> MachineInst {
             offset,
             ty,
         } => MachineInst::LoadBaseOffset {
-            dst,
-            base,
-            offset,
-            ty,
+            dst: *dst,
+            base: *base,
+            offset: *offset,
+            ty: *ty,
         },
         MInst::StoreBaseOffset {
             src,
@@ -142,20 +176,20 @@ fn into_machine_inst(inst: MInst) -> MachineInst {
             offset,
             ty,
         } => MachineInst::StoreBaseOffset {
-            src,
-            base,
-            offset,
-            ty,
+            src: *src,
+            base: *base,
+            offset: *offset,
+            ty: *ty,
         },
-        MInst::Jump { target } => MachineInst::Jump { target },
+        MInst::Jump { target } => MachineInst::Jump { target: *target },
         MInst::BrNz {
             test,
             taken,
             not_taken,
         } => MachineInst::BrNz {
-            test,
-            taken,
-            not_taken,
+            test: *test,
+            taken: *taken,
+            not_taken: *not_taken,
         },
     }
 }
@@ -163,7 +197,7 @@ fn into_machine_inst(inst: MInst) -> MachineInst {
 impl generated_code::Context for Sia32IsleContext<'_, '_> {
     isle_lower_prelude_methods!();
 
-    fn emit(&mut self, inst: MInst) -> Unit {
+    fn emit(&mut self, inst: &MInst) -> Unit {
         self.lower_ctx.emit(into_machine_inst(inst));
     }
 
