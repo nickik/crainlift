@@ -2,7 +2,7 @@ name: Forge Cranelift
 
 on:
   push:
-    branches: [forge-minimal, sia32-backend, sia32-m8-relocations, sia32-m7-isa-facilities, sia32-m6-i64-prep]
+    branches: [forge-minimal, sia32-backend, sia32-m8-relocations, sia32-m7-isa-facilities, sia32-m6-i64-prep, sia32-backend-hardening]
   workflow_dispatch:
 
 concurrency:
@@ -13,21 +13,35 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  sia32:
+    name: SIA32 bounded gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Check SIA target lexicon compatibility
         run: cargo test -p target-lexicon@0.13.5-sia.1
-      # This compiles the registered SIA32 backend alongside retained native backends.
-      - name: Check retained Cranelift workspace and SIA registration
-        run: |
-          cargo check -p cranelift-codegen --no-default-features --features std,arm64,riscv64,sia32
-          cargo check -p cranelift-frontend
-          cargo check -p cranelift-module
-          cargo check -p cranelift-native
+      - name: Build SIA32 independently
+        run: cargo check -p cranelift-codegen --no-default-features --features std,sia32
+      - name: Test SIA32 registration and target isolation
+        run: cargo test -p cranelift-codegen --test sia32_integration --no-default-features --features std,sia32
       - name: Test focused SIA32 backend code
         run: |
           cargo test -p cranelift-codegen --lib isa::sia32 --no-default-features --features std,sia32
           cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std,sia32
+      - name: Check aggregate native architecture build includes SIA32
+        run: cargo check -p cranelift-codegen --no-default-features --features std,all-native-arch
+
+  retained-native:
+    name: ARM64 and RISC-V regression gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check retained ARM64 and RISC-V backends
+        run: cargo check -p cranelift-codegen --no-default-features --features std,arm64,riscv64
+      - name: Check retained Cranelift integration crates
+        run: |
+          cargo check -p cranelift-frontend
+          cargo check -p cranelift-module
+          cargo check -p cranelift-native
