@@ -11,7 +11,7 @@
 (decl sia_emit_result (MInst WritableReg) InstOutput)
 (rule (sia_emit_result inst dst)
       (let ((_ Unit (emit inst)))
-        (output_reg (writable_reg_to_reg dst))))
+        (output (value_reg (writable_reg_to_reg dst)))))
 
 ;;;; Constants ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
