@@ -124,7 +124,10 @@ pub(crate) fn lower(
     inst: Inst,
 ) -> Option<InstOutput> {
     let mut isle_ctx = Sia32IsleContext::new(lower_ctx, backend);
-    generated_code::constructor_lower(&mut isle_ctx, inst)
+    match generated_code::constructor_lower(&mut isle_ctx, inst) {
+        Ok(output) => output,
+        Err(()) => panic!("SIA32 ISLE lower constructor returned an internal error for {inst:?}"),
+    }
 }
 
 pub(crate) fn lower_branch(
@@ -134,5 +137,8 @@ pub(crate) fn lower_branch(
     targets: &[MachLabel],
 ) -> Option<()> {
     let mut isle_ctx = Sia32IsleContext::new(lower_ctx, backend);
-    generated_code::constructor_lower_branch(&mut isle_ctx, branch, targets)
+    match generated_code::constructor_lower_branch(&mut isle_ctx, branch, targets) {
+        Ok(output) => output,
+        Err(()) => panic!("SIA32 ISLE branch constructor returned an internal error for {branch:?}"),
+    }
 }
