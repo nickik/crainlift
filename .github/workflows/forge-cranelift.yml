@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Check SIA target lexicon compatibility
-        run: cargo test -p target-lexicon
+        run: cargo test -p target-lexicon@0.13.5-sia.1
       - name: Check retained Cranelift workspace
         run: |
           cargo check -p cranelift-codegen --no-default-features --features std,arm64,riscv64
