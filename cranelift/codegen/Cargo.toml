@@ -68,10 +68,13 @@ x86 = []
 arm64 = []
 s390x = []
 riscv64 = []
+sia32 = []
 # Kept as an empty compatibility feature; this fork intentionally omits Pulley.
 pulley = []
 host-arch = []
 all-arch = ["all-native-arch"]
+# SIA32 is intentionally not in all-native-arch until target-lexicon and the
+# complete backend scaffold compile in the normal all-ISA gate.
 all-native-arch = ["x86", "arm64", "s390x", "riscv64"]
 enable-serde = [
     "serde",
