@@ -1,0 +1,145 @@
+;; Initial SIA32 CLIF-to-MachInst lowering.
+;;
+;; This deliberately starts with the integer leaf-function core. Unsupported
+;; CLIF operations continue to fail through Cranelift's normal "should be
+;; implemented in ISLE" path rather than being approximated.
+
+(decl partial lower (Inst) InstOutput)
+(decl partial lower_branch (Inst MachLabelSlice) Unit)
+
+;; Values no wider than the native SIA word use one integer register.
+(decl pure partial sia_word_ty (Type) Type)
+(rule (sia_word_ty $I8) $I8)
+(rule (sia_word_ty $I16) $I16)
+(rule (sia_word_ty $I32) $I32)
+
+;; Emit one result-producing instruction.
+(decl sia_emit_result (MInst WritableReg) InstOutput)
+(rule (sia_emit_result inst dst)
+      (let ((_ Unit (emit inst)))
+        (output_reg (writable_reg_to_reg dst))))
+
+;;;; Constants ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule (lower (iconst (sia_word_ty ty) (u64_from_imm64 n)))
+      (let ((dst WritableReg (temp_writable_reg ty)))
+        (sia_emit_result (sia_load_const dst n) dst)))
+
+;;;; Integer ALU ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule (lower (iadd (sia_word_ty ty) x y))
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_add dst lhs rhs) dst)))
+
+(rule (lower (isub (sia_word_ty ty) x y))
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_sub dst lhs rhs) dst)))
+
+(rule (lower (band (sia_word_ty ty) x y))
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_and dst lhs rhs) dst)))
+
+(rule (lower (bor (sia_word_ty ty) x y))
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_or dst lhs rhs) dst)))
+
+(rule (lower (bxor (sia_word_ty ty) x y))
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_xor dst lhs rhs) dst)))
+
+;; Variable shifts are initially restricted to I32. SIA masks the hardware
+;; shift count to five bits; accepting I8/I16 here without explicit masking
+;; would not implement CLIF's narrower-width semantics for all counts.
+(rule (lower (ishl $I32 x y))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_shl dst lhs rhs) dst)))
+
+(rule (lower (ushr $I32 x y))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_shr dst lhs rhs) dst)))
+
+(rule (lower (sshr $I32 x y))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_sar dst lhs rhs) dst)))
+
+(rule (lower (clz $I32 x))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (src Reg (put_in_reg x)))
+        (sia_emit_result (sia_clz dst src) dst)))
+
+(rule (lower (ctz $I32 x))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (src Reg (put_in_reg x)))
+        (sia_emit_result (sia_ctz dst src) dst)))
+
+(rule (lower (popcnt $I32 x))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (src Reg (put_in_reg x)))
+        (sia_emit_result (sia_popcnt dst src) dst)))
+
+;;;; Extension / reduction ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(decl sia_extend_result (Value bool u8) InstOutput)
+(rule (sia_extend_result src signed from_bits)
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (reg Reg (put_in_reg src)))
+        (sia_emit_result (sia_extend dst reg signed from_bits 32) dst)))
+
+(rule (lower (uextend $I32 x @ (value_type $I8)))
+      (sia_extend_result x false 8))
+(rule (lower (uextend $I32 x @ (value_type $I16)))
+      (sia_extend_result x false 16))
+(rule (lower (sextend $I32 x @ (value_type $I8)))
+      (sia_extend_result x true 8))
+(rule (lower (sextend $I32 x @ (value_type $I16)))
+      (sia_extend_result x true 16))
+
+;; Reduction needs no machine instruction: the destination observes the low
+;; bits of the same 32-bit register representation.
+(rule (lower (ireduce $I8 x @ (value_type $I32))) (output_value x))
+(rule (lower (ireduce $I16 x @ (value_type $I32))) (output_value x))
+
+;;;; Scalar memory ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(decl sia_load_result (Type Value i32) InstOutput)
+(rule (sia_load_result ty addr offset)
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (base Reg (put_in_reg addr)))
+        (sia_emit_result (sia_load_offset dst base offset ty) dst)))
+
+(rule (lower (load (sia_word_ty ty) (little_or_native_endian _) addr (offset32 offset)))
+      (sia_load_result ty addr offset))
+
+(rule (lower (store (little_or_native_endian _) src @ (value_type (sia_word_ty ty)) addr (offset32 offset)))
+      (let ((value Reg (put_in_reg src))
+            (base Reg (put_in_reg addr)))
+        (side_effect (SideEffectNoResult.Inst (sia_store_offset value base offset ty)))))
+
+;;;; Return and control flow ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; The ABI generates the Rets pseudo and architectural RET.
+(rule (lower (return args))
+      (lower_return args))
+
+(rule (lower_branch (jump _) (single_target target))
+      (emit_side_effect (SideEffectNoResult.Inst (sia_jump target))))
+
+(rule (lower_branch (brif cond _ _) (two_targets taken not_taken))
+      (let ((test Reg (put_in_reg cond)))
+        (emit_side_effect (SideEffectNoResult.Inst (sia_brnz test taken not_taken)))))
