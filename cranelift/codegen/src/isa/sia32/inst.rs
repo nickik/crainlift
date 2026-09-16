@@ -7,14 +7,14 @@
 use super::abi::Sia32MachineDeps;
 use super::label::LabelUse;
 use super::{encode, regs};
-use crate::binemit::CodeOffset;
+use crate::binemit::{CodeOffset, Reloc};
 use crate::ir::types::{I8, I16, I32, I64};
-use crate::ir::{self, Type};
+use crate::ir::{self, ExternalName, Type};
 use crate::isa::FunctionAlignment;
 use crate::machinst::{
-    ArgPair, CallType, Callee, FrameLayout, MachBuffer, MachInst, MachInstEmit,
-    MachInstEmitState, MachLabel, MachTerminator, OperandVisitor, Reg, RetPair, StackAMode,
-    Writable,
+    ArgPair, CallArgPair, CallInfo, CallRetPair, CallType, Callee, FrameLayout, MachBuffer,
+    MachInst, MachInstEmit, MachInstEmitState, MachLabel, MachTerminator, OperandVisitor, Reg,
+    RetLocation, RetPair, StackAMode, Writable,
 };
 use crate::machinst::reg::OperandVisitorImpl;
 use crate::{CodegenError, CodegenResult};
@@ -73,8 +73,9 @@ pub(crate) enum Inst {
 
     Jump { target: MachLabel },
     BrNz { test: Reg, taken: MachLabel, not_taken: MachLabel },
+    Call { info: Box<CallInfo<ExternalName>> },
+    CallInd { info: Box<CallInfo<Reg>> },
     Ret,
-    CallPlaceholder { target: Box<str> },
 }
 
 const INT1_RCS: [RegClass; 1] = [RegClass::Int];
@@ -116,9 +117,6 @@ fn store_op(ty: Type) -> StoreOp {
     }
 }
 
-/// Balanced radix-128 representation of a 32-bit value. Each digit is legal as
-/// a signed imm7. Building from the most-significant digit with SHL 7 + ADDI
-/// takes at most nine SIA instructions.
 fn const_digits(value: u32) -> Vec<i8> {
     let mut n = i64::from(value as i32);
     let mut low_to_high = Vec::new();
@@ -144,17 +142,7 @@ fn emit_const32(code: &mut MachBuffer<Inst>, dst: regs::Reg, value: u32) {
     }
 }
 
-/// Emit an inline, non-fallthrough literal island for a 32-bit value.
-///
-/// The LDPC displacement is patched by `Literal8`; a plain B skips the embedded
-/// word so execution can never enter literal data. The literal is always within
-/// a handful of bytes of the LDPC and therefore cannot exhaust Literal8 reach.
-fn emit_literal32(
-    code: &mut MachBuffer<Inst>,
-    state: &mut EmitState,
-    dst: regs::Reg,
-    value: u32,
-) {
+fn emit_literal32(code: &mut MachBuffer<Inst>, state: &mut EmitState, dst: regs::Reg, value: u32) {
     let literal = code.get_label();
     let done = code.get_label();
 
@@ -179,7 +167,6 @@ fn emit_add_imm32(code: &mut MachBuffer<Inst>, dst: regs::Reg, src: regs::Reg, i
         if imm != 0 { put_word(code, encode::addi(dst, imm).unwrap()); }
         return;
     }
-
     let scratch = regs::Reg::SCRATCH;
     if dst == scratch {
         assert!(src != scratch, "SIA32 cannot expand an arbitrary in-place add on reserved r12");
@@ -210,10 +197,8 @@ fn frame_stack_offset(mem: &StackAMode, frame: &FrameLayout) -> i32 {
 
 fn emit_load_zero_offset(code: &mut MachBuffer<Inst>, op: LoadOp, dst: regs::Reg, base: regs::Reg) {
     let word = match op {
-        LoadOp::I8 => encode::lb(dst, base),
-        LoadOp::U8 => encode::lbu(dst, base),
-        LoadOp::I16 => encode::lh(dst, base),
-        LoadOp::U16 => encode::lhu(dst, base),
+        LoadOp::I8 => encode::lb(dst, base), LoadOp::U8 => encode::lbu(dst, base),
+        LoadOp::I16 => encode::lh(dst, base), LoadOp::U16 => encode::lhu(dst, base),
         LoadOp::I32 => encode::lw(dst, base),
     };
     put_word(code, word);
@@ -221,18 +206,14 @@ fn emit_load_zero_offset(code: &mut MachBuffer<Inst>, op: LoadOp, dst: regs::Reg
 
 fn emit_store_zero_offset(code: &mut MachBuffer<Inst>, op: StoreOp, src: regs::Reg, base: regs::Reg) {
     let word = match op {
-        StoreOp::I8 => encode::sb(src, base),
-        StoreOp::I16 => encode::sh(src, base),
+        StoreOp::I8 => encode::sb(src, base), StoreOp::I16 => encode::sh(src, base),
         StoreOp::I32 => encode::sw(src, base),
     };
     put_word(code, word);
 }
 
 fn emit_load_base_offset(code: &mut MachBuffer<Inst>, op: LoadOp, dst: regs::Reg, base: regs::Reg, offset: i32) {
-    if offset == 0 {
-        emit_load_zero_offset(code, op, dst, base);
-        return;
-    }
+    if offset == 0 { emit_load_zero_offset(code, op, dst, base); return; }
     if dst != base {
         emit_add_imm32(code, dst, base, offset);
         emit_load_zero_offset(code, op, dst, dst);
@@ -245,15 +226,74 @@ fn emit_load_base_offset(code: &mut MachBuffer<Inst>, op: LoadOp, dst: regs::Reg
 }
 
 fn emit_store_base_offset(code: &mut MachBuffer<Inst>, op: StoreOp, src: regs::Reg, base: regs::Reg, offset: i32) {
-    if offset == 0 {
-        emit_store_zero_offset(code, op, src, base);
-        return;
-    }
+    if offset == 0 { emit_store_zero_offset(code, op, src, base); return; }
     let scratch = regs::Reg::SCRATCH;
     assert!(src != scratch && base != scratch,
         "nonzero-offset store involving reserved r12 requires a second scratch and must be lowered earlier");
     emit_add_imm32(code, scratch, base, offset);
     emit_store_zero_offset(code, op, src, scratch);
+}
+
+fn collect_call_operands<T>(info: &mut CallInfo<T>, collector: &mut impl OperandVisitor) {
+    for CallArgPair { vreg, preg } in &mut info.uses {
+        collector.reg_fixed_use(vreg, *preg);
+    }
+    for CallRetPair { vreg, location } in &mut info.defs {
+        match location {
+            RetLocation::Reg(preg, ..) => collector.reg_fixed_def(vreg, *preg),
+            RetLocation::Stack(..) => collector.any_def(vreg),
+        }
+    }
+    collector.reg_clobbers(info.clobbers);
+    if let Some(try_call_info) = &mut info.try_call_info {
+        try_call_info.collect_operands(collector);
+    }
+}
+
+fn record_call<T>(code: &mut MachBuffer<Inst>, state: &mut EmitState, info: &CallInfo<T>) {
+    assert_eq!(info.callee_pop_size, 0, "SIA32 SystemV calls never use callee-pop stack arguments");
+    assert!(!info.patchable, "SIA32 patchable call sites are not implemented yet");
+
+    if let Some(try_call) = &info.try_call_info {
+        code.add_try_call_site(
+            Some(state.frame_layout.sp_to_fp()),
+            try_call.exception_handlers(&state.frame_layout),
+        );
+    } else {
+        code.add_call_site();
+    }
+
+    let ret_addr = code.cur_offset();
+    if let Some(stack_map) = state.user_stack_map.take() {
+        code.push_user_stack_map(state, ret_addr, stack_map);
+    }
+}
+
+fn emit_direct_call(
+    code: &mut MachBuffer<Inst>,
+    state: &mut EmitState,
+    info: &CallInfo<ExternalName>,
+) {
+    let literal = code.get_label();
+    let done = code.get_label();
+
+    let load_at = code.cur_offset();
+    code.use_label_at_offset(load_at, literal, LabelUse::Literal8);
+    put_word(code, encode::ldpc_w(regs::Reg::SCRATCH, 0).unwrap());
+    put_word(code, encode::callr(regs::Reg::SCRATCH));
+    record_call(code, state, info);
+
+    // LR points here. On normal return, skip the relocated target word.
+    let branch_at = code.cur_offset();
+    code.use_label_at_offset(branch_at, done, LabelUse::Branch11);
+    code.add_uncond_branch(branch_at, branch_at + 2, done);
+    put_word(code, encode::b(0).unwrap());
+
+    code.align_to(4);
+    code.bind_label(literal, state.ctrl_plane_mut());
+    code.add_reloc(Reloc::Abs4, &info.dest, 0);
+    code.put4(0);
+    code.bind_label(done, state.ctrl_plane_mut());
 }
 
 impl Inst {
@@ -266,6 +306,8 @@ impl Inst {
             Self::AddImm { .. } | Self::SpAdjust { .. } | Self::StackAddr { .. } => 22,
             Self::LoadStack { .. } | Self::LoadBaseOffset { .. } => 24,
             Self::StoreStack { .. } | Self::StoreBaseOffset { .. } => 24,
+            Self::Call { .. } => 12,
+            Self::CallInd { .. } => 2,
             Self::StackLowerBoundTrap { .. } => 12,
             Self::Args { .. } | Self::Rets { .. } | Self::DummyUse { .. } => 0,
             _ => 2,
@@ -303,7 +345,11 @@ impl MachInst for Inst {
             Self::SpAdjust { .. } => {}
             Self::StackLowerBoundTrap { limit } => collector.reg_use(limit),
             Self::BrNz { test, .. } => collector.reg_use(test),
-            Self::CallPlaceholder { .. } => {}
+            Self::Call { info } => collect_call_operands(&mut **info, collector),
+            Self::CallInd { info } => {
+                collector.reg_use(&mut info.dest);
+                collect_call_operands(&mut **info, collector);
+            }
         }
     }
 
@@ -311,7 +357,7 @@ impl MachInst for Inst {
     fn is_term(&self) -> MachTerminator { match self { Self::Rets { .. } | Self::Ret => MachTerminator::Ret, Self::Jump { .. } | Self::BrNz { .. } => MachTerminator::Branch, _ => MachTerminator::None } }
     fn is_trap(&self) -> bool { matches!(self, Self::Trap { .. }) }
     fn is_args(&self) -> bool { matches!(self, Self::Args { .. }) }
-    fn call_type(&self) -> CallType { CallType::None }
+    fn call_type(&self) -> CallType { if matches!(self, Self::Call { .. } | Self::CallInd { .. }) { CallType::Regular } else { CallType::None } }
     fn is_included_in_clobbers(&self) -> bool { !self.is_args() }
     fn is_mem_access(&self) -> bool { matches!(self, Self::Load { .. } | Self::Store { .. } | Self::IndexedLoad { .. } | Self::IndexedStore { .. } | Self::LoadStack { .. } | Self::StoreStack { .. } | Self::LoadBaseOffset { .. } | Self::StoreBaseOffset { .. }) }
     fn gen_move(to_reg: Writable<Reg>, from_reg: Reg, ty: Type) -> Self { debug_assert_eq!(ty, I32); Self::Mov { dst: to_reg, src: from_reg } }
@@ -324,7 +370,7 @@ impl MachInst for Inst {
     fn gen_nop_units() -> Vec<Vec<u8>> { vec![encode::NOP.to_le_bytes().to_vec()] }
     fn worst_case_size() -> CodeOffset { 24 }
     fn worst_case_island_growth() -> CodeOffset { 34 }
-    fn is_safepoint(&self) -> bool { self.is_trap() }
+    fn is_safepoint(&self) -> bool { self.is_trap() || matches!(self, Self::Call { .. } | Self::CallInd { .. }) }
     fn function_alignment() -> FunctionAlignment { FunctionAlignment { minimum: 2, preferred: 4 } }
 }
 
@@ -382,11 +428,8 @@ impl MachInstEmit for Inst {
             Self::Li7 { dst, imm } => put_word(code, encode::li(arch_reg(dst.to_reg()), i32::from(*imm)).unwrap()),
             Self::Addi7 { dst, src, imm } => { let d=arch_reg(dst.to_reg()); let s=arch_reg(*src); if d != s { put_word(code,encode::mov(d,s)); } put_word(code,encode::addi(d,i32::from(*imm)).unwrap()); }
             Self::LoadConst32 { dst, value } => {
-                if const_digits(*value).len() <= 2 {
-                    emit_const32(code, arch_reg(dst.to_reg()), *value);
-                } else {
-                    emit_literal32(code, state, arch_reg(dst.to_reg()), *value);
-                }
+                if const_digits(*value).len() <= 2 { emit_const32(code, arch_reg(dst.to_reg()), *value); }
+                else { emit_literal32(code, state, arch_reg(dst.to_reg()), *value); }
             }
             Self::Load { op, dst, base } => emit_load_zero_offset(code,*op,arch_reg(dst.to_reg()),arch_reg(*base)),
             Self::Store { op, src, base } => emit_store_zero_offset(code,*op,arch_reg(*src),arch_reg(*base)),
@@ -436,8 +479,12 @@ impl MachInstEmit for Inst {
                 code.add_uncond_branch(second,second+2,*not_taken);
                 put_word(code,encode::b(0).unwrap());
             }
+            Self::Call { info } => emit_direct_call(code, state, info),
+            Self::CallInd { info } => {
+                put_word(code, encode::callr(arch_reg(info.dest)));
+                record_call(code, state, info);
+            }
             Self::Ret => put_word(code,encode::ret()),
-            Self::CallPlaceholder { .. } => panic!("SIA32 real call emission is implemented in the next emitter stage"),
         }
         debug_assert!(code.cur_offset()-start <= Self::worst_case_size());
     }
@@ -449,7 +496,7 @@ impl MachInstEmit for Inst {
 mod tests {
     use super::*;
     use crate::ir::types::{F32, I128};
-    use crate::isa::sia32::regs::mach_reg;
+    use crate::isa::{CallConv, sia32::regs::mach_reg};
 
     fn w(n:u8)->Writable<Reg>{ Writable::from_reg(mach_reg(n)) }
 
@@ -476,9 +523,15 @@ mod tests {
     }
     #[test]
     fn literal_pool_threshold_keeps_small_values_inline(){
-        assert!(const_digits(63).len() <= 2);
-        assert!(const_digits(128).len() <= 2);
-        assert!(const_digits(0xdead_beef).len() > 2);
+        assert!(const_digits(63).len() <= 2); assert!(const_digits(128).len() <= 2); assert!(const_digits(0xdead_beef).len() > 2);
+    }
+    #[test]
+    fn indirect_call_is_a_real_regular_call(){
+        let info=CallInfo::empty(mach_reg(3),CallConv::SystemV);
+        let call=Inst::CallInd{info:Box::new(info)};
+        assert_eq!(call.call_type(),CallType::Regular);
+        assert!(call.is_safepoint());
+        assert_eq!(call.encoded_worst_case_size(),2);
     }
     #[test]
     fn pseudos_report_conservative_sizes(){
