@@ -2,7 +2,7 @@ name: Forge Cranelift
 
 on:
   push:
-    branches: [forge-minimal]
+    branches: [forge-minimal, sia32-backend]
   workflow_dispatch:
 
 permissions:
@@ -20,3 +20,5 @@ jobs:
           cargo check -p cranelift-frontend
           cargo check -p cranelift-module
           cargo check -p cranelift-native
+      - name: Test SIA32 exact encoder
+        run: cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std
