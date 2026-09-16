@@ -12,6 +12,7 @@ extern crate std as alloc;
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::string::ToString;
 use core::fmt;
 use core::str::FromStr;
 
