@@ -5,6 +5,10 @@ on:
     branches: [forge-minimal, sia32-backend]
   workflow_dispatch:
 
+concurrency:
+  group: forge-cranelift-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -23,5 +27,7 @@ jobs:
           cargo check -p cranelift-frontend
           cargo check -p cranelift-module
           cargo check -p cranelift-native
-      - name: Test SIA32 target and exact encoder
-        run: cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std,sia32
+      - name: Test SIA32 target, ABI contract and exact encoder
+        run: |
+          cargo test -p cranelift-codegen --lib isa::sia32::abi_contract --no-default-features --features std,sia32
+          cargo test -p cranelift-codegen --test sia32_encode --no-default-features --features std,sia32
