@@ -73,9 +73,10 @@ sia32 = []
 pulley = []
 host-arch = []
 all-arch = ["all-native-arch"]
-# SIA32 is intentionally not in all-native-arch until target-lexicon and the
-# complete backend scaffold compile in the normal all-ISA gate.
-all-native-arch = ["x86", "arm64", "s390x", "riscv64"]
+# SIA32 is now a first-class independently selectable native architecture.
+# CLIF lowering remains deliberately unsupported; inclusion here means the
+# backend scaffold, target lookup and lowering-independent facilities build.
+all-native-arch = ["x86", "arm64", "s390x", "riscv64", "sia32"]
 enable-serde = [
     "serde",
     "serde_derive",
@@ -86,6 +87,6 @@ enable-serde = [
     "smallvec/serde",
 ]
 incremental-cache = ["enable-serde", "postcard", "sha2"]
-souper-harvest = ["souper-ir", "souper-ir/stringify"]
+souper-harvest = ["souper-ir"]
 isle-errors = ["cranelift-isle/fancy-errors"]
 timing = []
