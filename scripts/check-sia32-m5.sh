@@ -84,11 +84,32 @@ elapsed() {
     printf '%ss' "$((SECONDS - START_SECONDS))"
 }
 
+print_generated_isle_context() {
+    local log="$1"
+    local generated="$ISLE_DIR/isle_sia32.rs"
+    [[ -f "$generated" ]] || return 0
+
+    echo "---- generated SIA32 ISLE signatures ----"
+    grep -n -E 'trait Context|fn constructor_(lower|lower_branch)|fn output_reg|fn isle_output' "$generated" | head -n 80 || true
+
+    local location
+    location="$(grep -o -m1 -E 'isle_sia32\.rs:[0-9]+' "$log" || true)"
+    if [[ -n "$location" ]]; then
+        local line
+        line="${location##*:}"
+        local first=$(( line > 12 ? line - 12 : 1 ))
+        local last=$(( line + 12 ))
+        echo "---- generated SIA32 ISLE around first compiler error (line $line) ----"
+        nl -ba "$generated" | sed -n "${first},${last}p" || true
+    fi
+}
+
 print_failure_excerpt() {
     local log="$1"
     echo
     echo "---- first useful diagnostic ----"
     grep -n -E 'Error building ISLE files|\.isle:[0-9]+|error(\[|:)|panicked at|FAILED|failures:' "$log" | head -n 40 || true
+    print_generated_isle_context "$log"
     echo "---- tail ----"
     tail -n 100 "$log" || true
 }
