@@ -21,6 +21,7 @@ use core::fmt;
 use cranelift_control::ControlPlane;
 use target_lexicon::{Architecture, Triple};
 
+mod abi_contract;
 // The exact encoder and architectural-register model are currently exposed for
 // conformance tests while the MachInst layer is being built. Their individual
 // helpers are intentionally documented by the SIA architectural reference
