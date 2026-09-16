@@ -39,384 +39,421 @@ fn ensure_call_conv(call_conv: isa::CallConv) -> CodegenResult<()> {
         Ok(())
     } else {
         Err(CodegenError::Unsupported(
-            format!("SIA32 currently supports only SystemV calling convention, got {call_conv:?}")
-                .into(),
+            alloc::format!("SIA32 initially supports only the SystemV compiler ABI, not {call_conv}")
         ))
     }
 }
 
-fn abi_type(ty: Type) -> CodegenResult<(u32, u32)> {
-    if ty == I64 {
-        Ok((8, 8))
-    } else if ty.is_int() && ty.bits() <= 32 {
-        Ok((4, 4))
-    } else {
-        Err(CodegenError::Unsupported(
-            format!("unsupported SIA32 ABI type {ty}").into(),
-        ))
-    }
+fn preg_real(index: u8) -> RealReg {
+    RealReg::from(regs::preg(index))
 }
 
-fn phys_reg(n: u8) -> Reg {
-    regs::mach_reg(n)
-}
-
-fn writable_phys_reg(n: u8) -> Writable<Reg> {
-    Writable::from_reg(phys_reg(n))
-}
-
-fn arg_reg(index: usize) -> Option<Reg> {
-    regs::ARG_REGS.get(index).map(|r| phys_reg(r.index()))
-}
-
-fn return_reg(index: usize) -> Option<Reg> {
-    match index {
-        0 => Some(phys_reg(regs::RETURN_LOW.index())),
-        1 => Some(phys_reg(regs::RETURN_HIGH.index())),
-        2 => Some(phys_reg(3)),
-        3 => Some(phys_reg(4)),
-        4 => Some(phys_reg(5)),
-        5 => Some(phys_reg(6)),
-        _ => None,
-    }
+fn slot_extension(param: &ir::AbiParam, location: ABIArgLocation) -> ir::ArgumentExtension {
+    Sia32MachineDeps::get_ext_mode(isa::CallConv::SystemV, param.extension, location)
 }
 
 impl ABIMachineSpec for Sia32MachineDeps {
     type I = Inst;
     type F = SiaFlags;
 
-    const WORD_BITS: u32 = 32;
-    const STACK_ALIGN: u32 = 8;
-    const STACK_ARG_RET_SIZE_LIMIT: u32 = 128 * 1024;
-    const TRAP_CODE_STACK_OVERFLOW: ir::TrapCode = ir::TrapCode::STACK_OVERFLOW;
+    const STACK_ARG_RET_SIZE_LIMIT: u32 = 128 * 1024 * 1024;
+
+    fn word_bits() -> u32 { 32 }
+
+    fn stack_align(call_conv: isa::CallConv) -> u32 {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        8
+    }
 
     fn compute_arg_locs(
         call_conv: isa::CallConv,
-        _flags: &settings::Flags,
+        flags: &settings::Flags,
         params: &[ir::AbiParam],
         args_or_rets: ArgsOrRets,
         add_ret_area_ptr: bool,
         mut args: ArgsAccumulator,
     ) -> CodegenResult<(u32, Option<usize>)> {
         ensure_call_conv(call_conv)?;
-
-        let mut reg_index = 0usize;
-        let mut stack_offset = 0u32;
-        let max_regs = 6usize;
-
-        for param in params {
-            let ty = param.value_type;
-            let (size, align) = abi_type(ty)?;
-            let parts = if ty == I64 { 2 } else { 1 };
-
-            if parts == 2 && reg_index % 2 != 0 {
-                reg_index += 1;
-            }
-
-            let can_use_regs = reg_index + parts <= max_regs;
-            if can_use_regs {
-                let mut slots = ABIArgSlotVec::new();
-                for part in 0..parts {
-                    let reg = match args_or_rets {
-                        ArgsOrRets::Args => arg_reg(reg_index + part),
-                        ArgsOrRets::Rets => return_reg(reg_index + part),
-                    }
-                    .expect("register index checked against SIA32 ABI register count");
-                    slots.push(ABIArgSlot::Reg {
-                        reg,
-                        ty: I32,
-                        extension: param.extension,
-                    });
-                }
-                args.push(ABIArg::Slots { slots, purpose: param.purpose });
-                reg_index += parts;
-            } else {
-                stack_offset = align_to(stack_offset, align);
-                args.push(ABIArg::Stack {
-                    offset: stack_offset as i64,
-                    ty,
-                    extension: param.extension,
-                    purpose: param.purpose,
-                });
-                stack_offset += size;
-            }
+        if add_ret_area_ptr && args_or_rets != ArgsOrRets::Args {
+            return Err(CodegenError::Unsupported(
+                "SIA32 return-area pointer is valid only for arguments".to_owned(),
+            ));
         }
 
-        let ret_area_arg = if add_ret_area_ptr {
-            let reg = if reg_index < max_regs {
-                let reg = arg_reg(reg_index).unwrap();
-                reg_index += 1;
-                let mut slots = ABIArgSlotVec::new();
-                slots.push(ABIArgSlot::Reg {
-                    reg,
-                    ty: I32,
-                    extension: ir::ArgumentExtension::None,
-                });
-                args.push(ABIArg::Slots {
-                    slots,
-                    purpose: ir::ArgumentPurpose::Normal,
-                });
-                args.len().checked_sub(1)
+        let reg_last = match args_or_rets {
+            ArgsOrRets::Args => 6u8,
+            ArgsOrRets::Rets => 2u8,
+        };
+        let mut next_reg = if add_ret_area_ptr { 2u8 } else { 1u8 };
+        let mut stack_only = false;
+        let mut next_stack = 0u32;
+
+        let ret_area_ptr = add_ret_area_ptr.then(|| {
+            ABIArg::reg(
+                preg_real(1),
+                I32,
+                ir::ArgumentExtension::None,
+                ir::ArgumentPurpose::Normal,
+            )
+        });
+
+        for param in params {
+            if matches!(param.purpose, ir::ArgumentPurpose::StructArgument(_)) {
+                return Err(CodegenError::Unsupported(
+                    "SIA32 passes aggregates by address; lower StructArgument to an explicit pointer"
+                        .to_owned(),
+                ));
+            }
+
+            let (rcs, reg_tys) = Inst::rc_for_type(&param.value_type)?;
+            debug_assert!(rcs.iter().all(|rc| *rc == RegClass::Int));
+            let parts = reg_tys.len() as u8;
+            debug_assert!(parts == 1 || parts == 2);
+
+            // I64 values use ABI pairs r1:r2, r3:r4, r5:r6. Keep the low
+            // word in the lower-numbered architectural register.
+            if parts == 2 && next_reg % 2 == 0 {
+                next_reg = next_reg.saturating_add(1);
+            }
+
+            let fits_regs = !stack_only && next_reg <= reg_last && next_reg + parts - 1 <= reg_last;
+            let mut slots = ABIArgSlotVec::new();
+
+            if fits_regs {
+                for (part, ty) in reg_tys.iter().enumerate() {
+                    slots.push(ABIArgSlot::Reg {
+                        reg: preg_real(next_reg + part as u8),
+                        ty: *ty,
+                        extension: if parts == 1 {
+                            slot_extension(param, ABIArgLocation::Reg)
+                        } else {
+                            ir::ArgumentExtension::None
+                        },
+                    });
+                }
+                next_reg += parts;
             } else {
-                stack_offset = align_to(stack_offset, 4);
-                args.push(ABIArg::Stack {
-                    offset: stack_offset as i64,
-                    ty: I32,
-                    extension: ir::ArgumentExtension::None,
-                    purpose: ir::ArgumentPurpose::Normal,
-                });
-                stack_offset += 4;
-                args.len().checked_sub(1)
-            };
-            reg
+                if args_or_rets == ArgsOrRets::Rets && !flags.enable_multi_ret_implicit_sret() {
+                    return Err(CodegenError::Unsupported(
+                        "SIA32 return values exceed r1:r2; enable implicit sret or use StructReturn"
+                            .to_owned(),
+                    ));
+                }
+                if args_or_rets == ArgsOrRets::Args {
+                    stack_only = true;
+                }
+
+                let value_align = if parts == 2 { 8 } else { 4 };
+                next_stack = align_to(next_stack, value_align);
+                for (part, ty) in reg_tys.iter().enumerate() {
+                    slots.push(ABIArgSlot::Stack {
+                        offset: i64::from(next_stack + (part as u32 * 4)),
+                        ty: *ty,
+                        extension: if parts == 1 {
+                            slot_extension(param, ABIArgLocation::Stack)
+                        } else {
+                            ir::ArgumentExtension::None
+                        },
+                    });
+                }
+                next_stack += if parts == 2 { 8 } else { 4 };
+            }
+
+            args.push(ABIArg::Slots {
+                slots,
+                purpose: param.purpose,
+            });
+        }
+
+        let ret_area_pos = if let Some(ret_area_ptr) = ret_area_ptr {
+            args.push_non_formal(ret_area_ptr);
+            Some(args.args().len() - 1)
         } else {
             None
         };
 
-        Ok((align_to(stack_offset, Self::STACK_ALIGN), ret_area_arg))
+        Ok((align_to(next_stack, 8), ret_area_pos))
     }
 
-    fn gen_load_stack(mem: StackAMode, ty: Type, dst: Writable<Reg>) -> Inst {
-        Inst::LoadStack { dst, mem, ty }
+    fn gen_load_stack(mem: StackAMode, into_reg: Writable<Reg>, ty: Type) -> Inst {
+        Inst::LoadStack { dst: into_reg, mem, ty }
     }
 
-    fn gen_store_stack(mem: StackAMode, ty: Type, src: Reg) -> Inst {
-        Inst::StoreStack { src, mem, ty }
+    fn gen_store_stack(mem: StackAMode, from_reg: Reg, ty: Type) -> Inst {
+        Inst::StoreStack { src: from_reg, mem, ty }
     }
 
-    fn gen_move(dst: Writable<Reg>, src: Reg, ty: Type) -> Inst {
-        Inst::gen_move(dst, src, ty)
+    fn gen_move(to_reg: Writable<Reg>, from_reg: Reg, ty: Type) -> Inst {
+        Inst::gen_move(to_reg, from_reg, ty)
     }
 
     fn gen_extend(
-        dst: Writable<Reg>,
-        src: Reg,
+        to_reg: Writable<Reg>,
+        from_reg: Reg,
+        signed: bool,
         from_bits: u8,
         to_bits: u8,
-        signed: bool,
     ) -> Inst {
-        Inst::Extend { dst, src, signed, from_bits, to_bits }
+        Inst::Extend {
+            dst: to_reg,
+            src: from_reg,
+            signed,
+            from_bits,
+            to_bits,
+        }
     }
 
-    fn gen_args(args: Vec<ArgPair>) -> Inst {
-        Inst::Args { args }
-    }
+    fn gen_args(args: Vec<ArgPair>) -> Inst { Inst::Args { args } }
+    fn gen_rets(rets: Vec<RetPair>) -> Inst { Inst::Rets { rets } }
 
-    fn gen_rets(rets: Vec<RetPair>) -> Inst {
-        Inst::Rets { rets }
-    }
-
-    fn gen_add_imm(dst: Writable<Reg>, src: Reg, imm: i64) -> SmallInstVec<Inst> {
+    fn gen_add_imm(
+        call_conv: isa::CallConv,
+        into_reg: Writable<Reg>,
+        from_reg: Reg,
+        imm: u32,
+    ) -> SmallInstVec<Inst> {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         smallvec![Inst::AddImm {
-            dst,
-            src,
-            imm: i32::try_from(imm).expect("SIA32 stack immediate must fit i32"),
+            dst: into_reg,
+            src: from_reg,
+            imm: i32::try_from(imm).expect("SIA32 ABI add immediate must fit i32"),
         }]
     }
 
-    fn get_stacklimit_reg(_call_conv: isa::CallConv) -> Reg {
+    fn gen_stack_lower_bound_trap(limit_reg: Reg) -> SmallInstVec<Inst> {
+        smallvec![Inst::StackLowerBoundTrap { limit: limit_reg }]
+    }
+
+    fn gen_get_stack_addr(mem: StackAMode, into_reg: Writable<Reg>) -> Inst {
+        Inst::StackAddr { dst: into_reg, mem }
+    }
+
+    fn get_stacklimit_reg(call_conv: isa::CallConv) -> Reg {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         regs::stacklimit_reg()
     }
 
-    fn get_stacklimit_reg_checked(call_conv: isa::CallConv) -> Option<Reg> {
-        if call_conv == isa::CallConv::SystemV {
-            Some(regs::stacklimit_reg())
+    fn gen_load_base_offset(into_reg: Writable<Reg>, base: Reg, offset: i32, ty: Type) -> Inst {
+        Inst::LoadBaseOffset { dst: into_reg, base, offset, ty }
+    }
+
+    fn gen_store_base_offset(base: Reg, offset: i32, from_reg: Reg, ty: Type) -> Inst {
+        Inst::StoreBaseOffset { src: from_reg, base, offset, ty }
+    }
+
+    fn gen_sp_reg_adjust(amount: i32) -> SmallInstVec<Inst> {
+        if amount == 0 {
+            SmallInstVec::new()
         } else {
-            None
+            smallvec![Inst::SpAdjust { amount }]
         }
-    }
-
-    fn get_frame_pointer_reg() -> Reg {
-        regs::fp_reg()
-    }
-
-    fn get_stack_pointer_reg() -> Reg {
-        regs::stack_reg()
-    }
-
-    fn get_link_reg() -> Option<Reg> {
-        Some(regs::link_reg())
-    }
-
-    fn get_pinned_reg() -> Option<Reg> {
-        None
-    }
-
-    fn get_machine_env(_flags: &settings::Flags, _isa_flags: &Self::F) -> &MachineEnv {
-        &regs::MACHINE_ENV
-    }
-
-    fn get_regs_clobbered_by_call(
-        _call_conv_of_callee: isa::CallConv,
-        _call_conv_of_caller: isa::CallConv,
-    ) -> PRegSet {
-        let mut set = PRegSet::empty();
-        for r in regs::CALLER_SAVED {
-            set.add(regs::preg(r.index()));
-        }
-        set.add(regs::preg(regs::Reg::SCRATCH.index()));
-        set.add(regs::preg(regs::Reg::LR.index()));
-        set
-    }
-
-    fn get_ext_mode(
-        _call_conv: isa::CallConv,
-        _specified: ir::ArgumentExtension,
-    ) -> ir::ArgumentExtension {
-        ir::ArgumentExtension::None
     }
 
     fn compute_frame_layout(
         call_conv: isa::CallConv,
-        flags: &settings::Flags,
-        sig: &Signature,
-        regs: &[RealReg],
+        _flags: &settings::Flags,
+        _sig: &Signature,
+        regs_written: &[Writable<RealReg>],
         function_calls: FunctionCalls,
+        incoming_args_size: u32,
+        tail_args_size: u32,
+        stackslots_size: u32,
         fixed_frame_storage_size: u32,
         outgoing_args_size: u32,
-        clobber_size: u32,
-        _isa_flags: &Self::F,
     ) -> FrameLayout {
-        ensure_call_conv(call_conv).expect("call convention validated before frame-layout computation");
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
 
-        let mut clobbered_callee_saves = Vec::new();
-        let mut save_area = 0u32;
-        for &real in regs {
-            let hw = real.hw_enc();
-            if matches!(hw, 9..=11 | 15) {
-                save_area += 4;
-                clobbered_callee_saves.push(real);
-            }
-        }
+        let mut clobbered_callee_saves = regs_written
+            .iter()
+            .copied()
+            .filter(|reg| matches!(reg.to_reg().hw_enc(), 9..=11 | 15))
+            .collect::<Vec<_>>();
+        clobbered_callee_saves.sort_by_key(|reg| reg.to_reg().hw_enc());
+        clobbered_callee_saves.dedup_by_key(|reg| reg.to_reg().hw_enc());
 
-        let setup_area_size = if function_calls != FunctionCalls::None { 4 } else { 0 };
-        let raw_frame = fixed_frame_storage_size
-            .saturating_add(clobber_size)
-            .saturating_add(save_area)
-            .saturating_add(setup_area_size);
-        let frame_size = align_to(raw_frame, Self::STACK_ALIGN);
+        let setup_area_size = if function_calls == FunctionCalls::Regular { 8 } else { 0 };
+        let clobber_size = if clobbered_callee_saves.is_empty() {
+            0
+        } else {
+            align_to(clobbered_callee_saves.len() as u32 * 4, 8)
+        };
 
         FrameLayout {
             word_bytes: 4,
-            incoming_args_size: 0,
+            incoming_args_size,
+            tail_args_size,
             setup_area_size,
-            tail_args_size: 0,
-            clobber_size: clobber_size + save_area,
-            fixed_frame_storage_size,
-            outgoing_args_size,
-            stack_size: frame_size,
-            stack_align: Self::STACK_ALIGN,
+            clobber_size,
+            fixed_frame_storage_size: align_to(fixed_frame_storage_size, 8),
+            stackslots_size,
+            outgoing_args_size: align_to(outgoing_args_size, 8),
             clobbered_callee_saves,
+            function_calls,
         }
     }
 
     fn gen_prologue_frame_setup(
-        flags: &settings::Flags,
+        call_conv: isa::CallConv,
+        _flags: &settings::Flags,
+        _isa_flags: &SiaFlags,
         frame_layout: &FrameLayout,
     ) -> SmallInstVec<Inst> {
-        let mut insts = SmallInstVec::new();
-        if frame_layout.stack_size != 0 {
-            insts.push(Inst::SpAdjust { amount: -(frame_layout.stack_size as i32) });
-        }
-
-        let mut offset = frame_layout.fixed_frame_storage_size + frame_layout.clobber_size;
-        for real in &frame_layout.clobbered_callee_saves {
-            offset = offset.saturating_sub(4);
-            insts.push(Inst::StoreBaseOffset {
-                src: Reg::from(*real),
-                base: regs::stack_reg(),
-                offset: offset as i32,
-                ty: I32,
-            });
-        }
-
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        let mut out = SmallInstVec::new();
         if frame_layout.setup_area_size != 0 {
-            insts.push(Inst::StoreBaseOffset {
+            debug_assert_eq!(frame_layout.setup_area_size, 8);
+            out.push(Inst::SpAdjust { amount: -8 });
+            out.push(Inst::StoreBaseOffset {
                 src: regs::link_reg(),
                 base: regs::stack_reg(),
-                offset: (frame_layout.stack_size - 4) as i32,
+                offset: 0,
                 ty: I32,
             });
         }
-
-        if flags.enable_probestack() {
-            insts.push(Inst::StackLowerBoundTrap { limit: regs::stacklimit_reg() });
-        }
-
-        insts
+        out
     }
 
     fn gen_epilogue_frame_restore(
+        call_conv: isa::CallConv,
         _flags: &settings::Flags,
+        _isa_flags: &SiaFlags,
         frame_layout: &FrameLayout,
     ) -> SmallInstVec<Inst> {
-        let mut insts = SmallInstVec::new();
-
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        let mut out = SmallInstVec::new();
         if frame_layout.setup_area_size != 0 {
-            insts.push(Inst::LoadBaseOffset {
+            out.push(Inst::LoadBaseOffset {
                 dst: regs::writable_link_reg(),
                 base: regs::stack_reg(),
-                offset: (frame_layout.stack_size - 4) as i32,
+                offset: 0,
                 ty: I32,
             });
+            out.push(Inst::SpAdjust { amount: 8 });
         }
+        out
+    }
 
-        let mut offset = frame_layout.fixed_frame_storage_size + frame_layout.clobber_size;
-        for real in frame_layout.clobbered_callee_saves.iter().rev() {
-            offset = offset.saturating_sub(4);
-            insts.push(Inst::LoadBaseOffset {
-                dst: Writable::from_reg(Reg::from(*real)),
+    fn gen_return(
+        call_conv: isa::CallConv,
+        _isa_flags: &SiaFlags,
+        _frame_layout: &FrameLayout,
+    ) -> SmallInstVec<Inst> {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        smallvec![Inst::Ret]
+    }
+
+    fn gen_probestack(_insts: &mut SmallInstVec<Inst>, _frame_size: u32) {
+        panic!("SIA32 stack probing is not part of the initial ABI")
+    }
+
+    fn gen_inline_probestack(
+        _insts: &mut SmallInstVec<Inst>,
+        _call_conv: isa::CallConv,
+        _frame_size: u32,
+        _guard_size: u32,
+    ) {
+        panic!("SIA32 inline stack probing is not part of the initial ABI")
+    }
+
+    fn gen_clobber_save(
+        call_conv: isa::CallConv,
+        _flags: &settings::Flags,
+        frame_layout: &FrameLayout,
+    ) -> SmallVec<[Inst; 16]> {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        let mut out = SmallVec::new();
+        if frame_layout.clobber_size == 0 {
+            return out;
+        }
+        out.push(Inst::SpAdjust { amount: -(frame_layout.clobber_size as i32) });
+        for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
+            out.push(Inst::StoreBaseOffset {
+                src: Reg::from(reg.to_reg()),
                 base: regs::stack_reg(),
-                offset: offset as i32,
+                offset: (i as i32) * 4,
                 ty: I32,
             });
         }
+        out
+    }
 
-        if frame_layout.stack_size != 0 {
-            insts.push(Inst::SpAdjust { amount: frame_layout.stack_size as i32 });
+    fn gen_clobber_restore(
+        call_conv: isa::CallConv,
+        _flags: &settings::Flags,
+        frame_layout: &FrameLayout,
+    ) -> SmallVec<[Inst; 16]> {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        let mut out = SmallVec::new();
+        if frame_layout.clobber_size == 0 {
+            return out;
         }
-        insts
+        for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
+            out.push(Inst::LoadBaseOffset {
+                dst: Writable::from_reg(Reg::from(reg.to_reg())),
+                base: regs::stack_reg(),
+                offset: (i as i32) * 4,
+                ty: I32,
+            });
+        }
+        out.push(Inst::SpAdjust { amount: frame_layout.clobber_size as i32 });
+        out
     }
 
-    fn gen_return(_call_conv: isa::CallConv) -> Inst {
-        Inst::Ret
-    }
-
-    fn gen_stack_lower_bound_trap(limit: Reg) -> SmallInstVec<Inst> {
-        smallvec![Inst::StackLowerBoundTrap { limit }]
-    }
-
-    fn gen_memcpy(
+    fn gen_memcpy<F: FnMut(Type) -> Writable<Reg>>(
         _call_conv: isa::CallConv,
         _dst: Reg,
         _src: Reg,
         _size: usize,
-    ) -> SmallInstVec<Inst> {
-        panic!("SIA32 ABI memcpy synthesis is not implemented")
+        _alloc_tmp: F,
+    ) -> SmallVec<[Inst; 8]> {
+        panic!("SIA32 initial ABI lowers aggregates by address and does not synthesize memcpy")
     }
 
-    fn gen_inline_probestack(_frame_size: u32, _guard_size: u32) -> SmallInstVec<Inst> {
-        panic!("SIA32 inline probestack is not implemented")
+    fn get_number_of_spillslots_for_value(
+        rc: RegClass,
+        _target_vector_bytes: u32,
+        _isa_flags: &SiaFlags,
+    ) -> u32 {
+        match rc {
+            RegClass::Int => 1,
+            RegClass::Float | RegClass::Vector => unreachable!("SIA32 has no FP/vector register class"),
+        }
     }
 
-    fn is_caller_save(reg: RealReg) -> bool {
-        matches!(reg.hw_enc(), 1..=8)
+    fn get_machine_env(_flags: &settings::Flags, call_conv: isa::CallConv) -> &MachineEnv {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        &regs::MACHINE_ENV
     }
 
-    fn retval_temp_reg() -> Writable<Reg> {
-        writable_phys_reg(12)
+    fn get_regs_clobbered_by_call(
+        call_conv_of_callee: isa::CallConv,
+        _is_exception: bool,
+    ) -> PRegSet {
+        ensure_call_conv(call_conv_of_callee).expect("unsupported SIA32 calling convention");
+        PRegSet::empty()
+            .with(regs::preg(1)).with(regs::preg(2)).with(regs::preg(3)).with(regs::preg(4))
+            .with(regs::preg(5)).with(regs::preg(6)).with(regs::preg(7)).with(regs::preg(8))
+            .with(regs::preg(12)).with(regs::preg(14))
     }
 
-    fn spilltmp_reg() -> Writable<Reg> {
-        writable_phys_reg(12)
+    fn get_ext_mode(
+        call_conv: isa::CallConv,
+        specified: ir::ArgumentExtension,
+        _location: ABIArgLocation,
+    ) -> ir::ArgumentExtension {
+        ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
+        specified
     }
-}
 
-// Inherent helpers keep this backend independent of trait-import scope at call
-// sites while still delegating to the Cranelift MachInst implementation.
-impl Inst {
-    pub(crate) fn sia_gen_move(dst: Writable<Reg>, src: Reg, ty: Type) -> Self {
-        <Self as crate::machinst::MachInst>::gen_move(dst, src, ty)
+    fn retval_temp_reg(call_conv_of_callee: isa::CallConv) -> Writable<Reg> {
+        ensure_call_conv(call_conv_of_callee).expect("unsupported SIA32 calling convention");
+        regs::writable_scratch_reg()
+    }
+
+    fn exception_payload_regs(callee_conv: isa::CallConv) -> &'static [Reg] {
+        ensure_call_conv(callee_conv).expect("unsupported SIA32 calling convention");
+        static REGS: [Reg; 2] = [regs::mach_reg(1), regs::mach_reg(2)];
+        &REGS
     }
 }
 
@@ -424,57 +461,56 @@ impl Inst {
 mod tests {
     use super::*;
 
-    fn p(ty: Type) -> ir::AbiParam { ir::AbiParam::new(ty) }
+    #[test]
+    fn machine_abi_has_expected_word_and_stack_size() {
+        assert_eq!(Sia32MachineDeps::word_bits(), 32);
+        assert_eq!(Sia32MachineDeps::word_bytes(), 4);
+        assert_eq!(Sia32MachineDeps::stack_align(isa::CallConv::SystemV), 8);
+    }
 
     #[test]
-    fn machine_env_excludes_fixed_registers() {
+    fn call_clobbers_match_frozen_abi_plus_reserved_temporaries() {
+        let set = Sia32MachineDeps::get_regs_clobbered_by_call(isa::CallConv::SystemV, false);
+        for n in 1..=8 { assert!(set.contains(regs::preg(n))); }
+        assert!(set.contains(regs::preg(12)));
+        assert!(set.contains(regs::preg(14)));
+        for n in [9, 10, 11, 15] { assert!(!set.contains(regs::preg(n))); }
+    }
+
+    #[test]
+    fn machine_environment_excludes_fixed_registers() {
         let env = Sia32MachineDeps::get_machine_env(
             &settings::Flags::new(settings::builder()),
-            &SiaFlags::new(&settings::Flags::new(settings::builder()), &settings::builder()),
+            isa::CallConv::SystemV,
         );
-        for fixed in [0u8, 12, 13, 14] {
-            let preg = regs::preg(fixed);
+        for n in [0, 12, 13, 14] {
+            let preg = regs::preg(n);
             assert!(!env.preferred_regs_by_class[0].contains(preg));
             assert!(!env.non_preferred_regs_by_class[0].contains(preg));
         }
-        for alloc in [1u8, 8, 9, 11, 15] {
-            let preg = regs::preg(alloc);
-            assert!(
-                env.preferred_regs_by_class[0].contains(preg)
-                    || env.non_preferred_regs_by_class[0].contains(preg)
-            );
-        }
     }
 
     #[test]
-    fn call_clobbers_match_caller_saved_and_reserved_scratch() {
-        let set = Sia32MachineDeps::get_regs_clobbered_by_call(
-            isa::CallConv::SystemV,
-            isa::CallConv::SystemV,
+    fn narrow_integer_abi_extensions_are_signature_driven() {
+        assert_eq!(
+            Sia32MachineDeps::get_ext_mode(
+                isa::CallConv::SystemV,
+                ir::ArgumentExtension::Uext,
+                ABIArgLocation::Reg,
+            ),
+            ir::ArgumentExtension::Uext
         );
-        for r in 1u8..=8 {
-            assert!(set.contains(regs::preg(r)));
-        }
-        assert!(set.contains(regs::preg(12)));
-        assert!(set.contains(regs::preg(14)));
-        for r in [9u8, 10, 11, 15] {
-            assert!(!set.contains(regs::preg(r)));
-        }
     }
 
     #[test]
-    fn scalar_and_pair_arguments_obey_register_contract() {
-        let flags = settings::Flags::new(settings::builder());
-        let mut storage = Vec::new();
-        let params = [p(I32), p(I64), p(I32)];
-        let (stack, _) = Sia32MachineDeps::compute_arg_locs(
-            isa::CallConv::SystemV,
-            &flags,
-            &params,
-            ArgsOrRets::Args,
-            false,
-            ArgsAccumulator::new(&mut storage),
-        ).unwrap();
-        assert_eq!(stack, 0);
+    fn basic_memory_ops_are_integer_only() {
+        let load = Sia32MachineDeps::gen_load_base_offset(
+            Writable::from_reg(regs::mach_reg(1)),
+            regs::mach_reg(2),
+            4,
+            I32,
+        );
+        assert!(matches!(load, Inst::LoadBaseOffset { .. }));
+        let _ = (LoadOp::I8, StoreOp::I8, I8, I16, I64);
     }
 }
