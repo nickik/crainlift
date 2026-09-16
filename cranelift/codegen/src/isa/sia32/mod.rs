@@ -21,13 +21,10 @@ use core::fmt;
 use cranelift_control::ControlPlane;
 use target_lexicon::{Architecture, Triple};
 
+mod abi;
 mod abi_contract;
 mod inst;
 mod label;
-// The exact encoder and architectural-register model are currently exposed for
-// conformance tests while the MachInst layer is being built. Their individual
-// helpers are intentionally documented by the SIA architectural reference
-// rather than duplicating hundreds of one-line rustdoc comments here.
 #[allow(missing_docs)]
 pub mod encode;
 #[allow(missing_docs)]
@@ -48,11 +45,7 @@ impl Sia32Backend {
         flags: shared_settings::Flags,
         isa_flags: settings::Flags,
     ) -> Self {
-        Self {
-            triple,
-            flags,
-            isa_flags,
-        }
+        Self { triple, flags, isa_flags }
     }
 }
 
@@ -66,33 +59,16 @@ impl TargetIsa for Sia32Backend {
         _ctrl_plane: &mut ControlPlane,
     ) -> CodegenResult<CompiledCodeStencil> {
         Err(CodegenError::Unsupported(
-            "SIA32 target is registered, but MachInst lowering is not implemented yet".into(),
+            "SIA32 target is registered, but CLIF lowering is not implemented yet".into(),
         ))
     }
 
-    fn name(&self) -> &'static str {
-        "sia32"
-    }
-
-    fn dynamic_vector_bytes(&self, _dynamic_ty: ir::Type) -> u32 {
-        0
-    }
-
-    fn triple(&self) -> &Triple {
-        &self.triple
-    }
-
-    fn flags(&self) -> &shared_settings::Flags {
-        &self.flags
-    }
-
-    fn isa_flags(&self) -> Vec<shared_settings::Value> {
-        self.isa_flags.iter().collect()
-    }
-
-    fn isa_flags_hash_key(&self) -> IsaFlagsHashKey<'_> {
-        IsaFlagsHashKey(self.isa_flags.hash_key())
-    }
+    fn name(&self) -> &'static str { "sia32" }
+    fn dynamic_vector_bytes(&self, _dynamic_ty: ir::Type) -> u32 { 0 }
+    fn triple(&self) -> &Triple { &self.triple }
+    fn flags(&self) -> &shared_settings::Flags { &self.flags }
+    fn isa_flags(&self) -> Vec<shared_settings::Value> { self.isa_flags.iter().collect() }
+    fn isa_flags_hash_key(&self) -> IsaFlagsHashKey<'_> { IsaFlagsHashKey(self.isa_flags.hash_key()) }
 
     #[cfg(feature = "unwind")]
     fn emit_unwind_info(
@@ -104,22 +80,14 @@ impl TargetIsa for Sia32Backend {
     }
 
     fn text_section_builder(&self, _num_labeled_funcs: usize) -> Box<dyn TextSectionBuilder> {
-        // There is no useful text-section builder until SIA's MachInst and
-        // branch-relaxation layer exists. Do not fake another ISA's behavior.
-        panic!("SIA32 text-section building requires the MachInst emitter milestone")
+        panic!("SIA32 text-section building requires the completed M3 emitter")
     }
 
     fn function_alignment(&self) -> FunctionAlignment {
-        FunctionAlignment {
-            minimum: 2,
-            preferred: 4,
-        }
+        FunctionAlignment { minimum: 2, preferred: 4 }
     }
 
-    fn page_size_align_log2(&self) -> u8 {
-        // Lighting's architectural base page is 2 KiB.
-        11
-    }
+    fn page_size_align_log2(&self) -> u8 { 11 }
 
     fn pretty_print_reg(&self, reg: Reg, _size: u8) -> String {
         match reg.to_real_reg() {
@@ -133,33 +101,14 @@ impl TargetIsa for Sia32Backend {
         }
     }
 
-    fn has_native_fma(&self) -> bool {
-        false
-    }
-
-    fn has_round(&self) -> bool {
-        false
-    }
-
-    fn has_blendv_lowering(&self, _ty: Type) -> bool {
-        false
-    }
-
-    fn has_x86_pshufb_lowering(&self) -> bool {
-        false
-    }
-
-    fn has_x86_pmulhrsw_lowering(&self) -> bool {
-        false
-    }
-
-    fn has_x86_pmaddubsw_lowering(&self) -> bool {
-        false
-    }
+    fn has_native_fma(&self) -> bool { false }
+    fn has_round(&self) -> bool { false }
+    fn has_blendv_lowering(&self, _ty: Type) -> bool { false }
+    fn has_x86_pshufb_lowering(&self) -> bool { false }
+    fn has_x86_pmulhrsw_lowering(&self) -> bool { false }
+    fn has_x86_pmaddubsw_lowering(&self) -> bool { false }
 
     fn default_argument_extension(&self) -> ir::ArgumentExtension {
-        // SIA's ABI extension is signature-dependent, so do not impose a
-        // blanket sign- or zero-extension here.
         ir::ArgumentExtension::None
     }
 }
@@ -180,11 +129,7 @@ pub fn isa_builder(triple: Triple) -> IsaBuilder {
         Architecture::Sia32 => {}
         _ => unreachable!(),
     }
-    IsaBuilder {
-        triple,
-        setup: settings::builder(),
-        constructor: isa_constructor,
-    }
+    IsaBuilder { triple, setup: settings::builder(), constructor: isa_constructor }
 }
 
 fn isa_constructor(
