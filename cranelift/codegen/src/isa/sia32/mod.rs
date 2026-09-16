@@ -27,6 +27,7 @@ mod i64_prep;
 mod inst;
 mod inst_abi_compat;
 mod label;
+mod lower;
 mod reloc;
 #[allow(missing_docs)]
 pub mod encode;
