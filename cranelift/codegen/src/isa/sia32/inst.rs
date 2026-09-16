@@ -144,6 +144,35 @@ fn emit_const32(code: &mut MachBuffer<Inst>, dst: regs::Reg, value: u32) {
     }
 }
 
+/// Emit an inline, non-fallthrough literal island for a 32-bit value.
+///
+/// The LDPC displacement is patched by `Literal8`; a plain B skips the embedded
+/// word so execution can never enter literal data. The literal is always within
+/// a handful of bytes of the LDPC and therefore cannot exhaust Literal8 reach.
+fn emit_literal32(
+    code: &mut MachBuffer<Inst>,
+    state: &mut EmitState,
+    dst: regs::Reg,
+    value: u32,
+) {
+    let literal = code.get_label();
+    let done = code.get_label();
+
+    let load_at = code.cur_offset();
+    code.use_label_at_offset(load_at, literal, LabelUse::Literal8);
+    put_word(code, encode::ldpc_w(dst, 0).unwrap());
+
+    let branch_at = code.cur_offset();
+    code.use_label_at_offset(branch_at, done, LabelUse::Branch11);
+    code.add_uncond_branch(branch_at, branch_at + 2, done);
+    put_word(code, encode::b(0).unwrap());
+
+    code.align_to(4);
+    code.bind_label(literal, state.ctrl_plane_mut());
+    code.put4(value);
+    code.bind_label(done, state.ctrl_plane_mut());
+}
+
 fn emit_add_imm32(code: &mut MachBuffer<Inst>, dst: regs::Reg, src: regs::Reg, imm: i32) {
     if (-64..=63).contains(&imm) {
         if dst != src { put_word(code, encode::mov(dst, src)); }
@@ -204,8 +233,6 @@ fn emit_load_base_offset(code: &mut MachBuffer<Inst>, op: LoadOp, dst: regs::Reg
         emit_load_zero_offset(code, op, dst, base);
         return;
     }
-    // The destination itself is dead before a load, so use it as the effective
-    // address register whenever possible; this also handles base==r12 safely.
     if dst != base {
         emit_add_imm32(code, dst, base, offset);
         emit_load_zero_offset(code, op, dst, dst);
@@ -296,7 +323,7 @@ impl MachInst for Inst {
     fn gen_nop(_preferred_size: usize) -> Self { Self::Nop }
     fn gen_nop_units() -> Vec<Vec<u8>> { vec![encode::NOP.to_le_bytes().to_vec()] }
     fn worst_case_size() -> CodeOffset { 24 }
-    fn worst_case_island_growth() -> CodeOffset { 32 }
+    fn worst_case_island_growth() -> CodeOffset { 34 }
     fn is_safepoint(&self) -> bool { self.is_trap() }
     fn function_alignment() -> FunctionAlignment { FunctionAlignment { minimum: 2, preferred: 4 } }
 }
@@ -354,7 +381,13 @@ impl MachInstEmit for Inst {
             }
             Self::Li7 { dst, imm } => put_word(code, encode::li(arch_reg(dst.to_reg()), i32::from(*imm)).unwrap()),
             Self::Addi7 { dst, src, imm } => { let d=arch_reg(dst.to_reg()); let s=arch_reg(*src); if d != s { put_word(code,encode::mov(d,s)); } put_word(code,encode::addi(d,i32::from(*imm)).unwrap()); }
-            Self::LoadConst32 { dst, value } => emit_const32(code, arch_reg(dst.to_reg()), *value),
+            Self::LoadConst32 { dst, value } => {
+                if const_digits(*value).len() <= 2 {
+                    emit_const32(code, arch_reg(dst.to_reg()), *value);
+                } else {
+                    emit_literal32(code, state, arch_reg(dst.to_reg()), *value);
+                }
+            }
             Self::Load { op, dst, base } => emit_load_zero_offset(code,*op,arch_reg(dst.to_reg()),arch_reg(*base)),
             Self::Store { op, src, base } => emit_store_zero_offset(code,*op,arch_reg(*src),arch_reg(*base)),
             Self::IndexedLoad { dst, base, index } => put_word(code,encode::lda_w(arch_reg(dst.to_reg()),arch_reg(*base),arch_reg(*index))),
@@ -440,6 +473,12 @@ mod tests {
             for &d in &digits[1..] { got=got.wrapping_shl(7).wrapping_add(d as i32 as u32); }
             assert_eq!(got,value,"digits={digits:?}");
         }
+    }
+    #[test]
+    fn literal_pool_threshold_keeps_small_values_inline(){
+        assert!(const_digits(63).len() <= 2);
+        assert!(const_digits(128).len() <= 2);
+        assert!(const_digits(0xdead_beef).len() > 2);
     }
     #[test]
     fn pseudos_report_conservative_sizes(){
