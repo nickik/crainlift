@@ -12,8 +12,10 @@ members = [
   "cranelift/entity",
   "cranelift/frontend",
   "cranelift/isle/isle",
+  "cranelift/jit",
   "cranelift/module",
   "cranelift/native",
+  "cranelift/object",
   "cranelift/srcgen",
   "crates/core",
   "vendor/target-lexicon-sia",
@@ -71,6 +73,8 @@ cranelift-module = { path = "cranelift/module", version = "0.137.0-dev" }
 cranelift-bforest = { path = "cranelift/bforest", version = "0.137.0-dev" }
 cranelift-bitset = { path = "cranelift/bitset", version = "0.137.0-dev" }
 cranelift-control = { path = "cranelift/control", version = "0.137.0-dev", default-features = false }
+cranelift-jit = { path = "cranelift/jit", version = "0.137.0-dev" }
+cranelift-object = { path = "cranelift/object", version = "0.137.0-dev" }
 cranelift-srcgen = { path = "cranelift/srcgen", version = "0.137.0-dev" }
 wasmtime-core = { path = "crates/core", version = "=50.0.0-dev", package = "wasmtime-internal-core" }
 
