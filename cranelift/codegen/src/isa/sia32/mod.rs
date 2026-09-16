@@ -21,11 +21,10 @@ use core::fmt;
 use cranelift_control::ControlPlane;
 use target_lexicon::{Architecture, Triple};
 
-#[path = "abi_module.rs"]
 mod abi;
 mod abi_contract;
-#[path = "inst_module.rs"]
 mod inst;
+mod inst_abi_compat;
 mod label;
 #[allow(missing_docs)]
 pub mod encode;
