@@ -16,6 +16,7 @@ members = [
   "cranelift/native",
   "cranelift/srcgen",
   "crates/core",
+  "vendor/target-lexicon-sia",
 ]
 
 [workspace.package]
@@ -75,7 +76,8 @@ wasmtime-core = { path = "crates/core", version = "=50.0.0-dev", package = "wasm
 
 # Bytecode Alliance dependencies used by Cranelift.
 regalloc2 = "0.15.2"
-target-lexicon = "0.13.5"
+# Thin compatibility layer over upstream 0.13.5 adding Architecture::Sia32.
+target-lexicon = { path = "vendor/target-lexicon-sia" }
 
 # External dependencies required by the retained packages.
 arbitrary = "1.4.2"
