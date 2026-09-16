@@ -2,7 +2,7 @@ name: Forge Cranelift
 
 on:
   push:
-    branches: [forge-minimal, sia32-backend, sia32-m8-relocations, sia32-m7-isa-facilities, sia32-m6-i64-prep, sia32-backend-hardening]
+    branches: [forge-minimal, sia32-backend, sia32-m8-relocations, sia32-m7-isa-facilities, sia32-m6-i64-prep, sia32-backend-hardening, m5-sia32-lowering-hardened]
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: M5 fast diagnostic gate
+        run: bash scripts/check-sia32-m5.sh fast
       - name: Check SIA target lexicon compatibility
         run: cargo test -p target-lexicon@0.13.5-sia.1
       - name: Build SIA32 independently
