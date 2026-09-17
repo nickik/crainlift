@@ -24,6 +24,15 @@ use std::fmt::Write as _;
 use std::mem;
 use target_lexicon::{PointerWidth, Triple};
 
+/// Private ELF `e_machine` value for the experimental SIA32 toolchain.
+///
+/// R0 needs a real ELF32 container so Rust can archive its object, while the
+/// published ELF registry does not yet assign SIA an architecture number. This
+/// value is deliberately in the processor-specific range and is only an
+/// interchange contract between the SIA compiler, tools, and simulator. It is
+/// not an attempt to identify SIA code as any registered architecture.
+const ELF_EM_SIA32_PRIVATE: u16 = 0xff53;
+
 /// A builder for `ObjectModule`.
 pub struct ObjectBuilder {
     isa: OwnedTargetIsa,
@@ -35,6 +44,10 @@ pub struct ObjectBuilder {
     libcall_names: Box<dyn Fn(ir::LibCall) -> String + Send + Sync>,
     per_function_section: bool,
     per_data_object_section: bool,
+    /// The object crate has no SIA architecture yet. For the relocation-free
+    /// R0 subset it can still write the generic ELF32 layout; `emit` patches
+    /// the final `e_machine` to the SIA-specific value above.
+    sia32_private_elf: bool,
     #[cfg(feature = "unwind")]
     unwind_info: bool,
 }
@@ -71,6 +84,7 @@ impl ObjectBuilder {
                 )));
             }
         };
+        let mut sia32_private_elf = false;
         let architecture = match isa.triple().architecture {
             target_lexicon::Architecture::X86_32(_) => object::Architecture::I386,
             target_lexicon::Architecture::X86_64 => object::Architecture::X86_64,
@@ -103,6 +117,19 @@ impl ObjectBuilder {
                 };
                 object::Architecture::Riscv64
             }
+            target_lexicon::Architecture::Sia32 => {
+                if binary_format != object::BinaryFormat::Elf {
+                    return Err(ModuleError::Backend(anyhow!(
+                        "SIA32 R0 supports only the private ELF32 object container",
+                    )));
+                }
+
+                // `object` supplies the ELF32 structural writer here only.
+                // The final artifact's machine identity is replaced in
+                // `ObjectProduct::emit`; no I386 relocation is ever emitted.
+                sia32_private_elf = true;
+                object::Architecture::I386
+            }
             target_lexicon::Architecture::S390x => object::Architecture::S390x,
             architecture => {
                 return Err(ModuleError::Backend(anyhow!(
@@ -124,6 +151,7 @@ impl ObjectBuilder {
             libcall_names,
             per_function_section: false,
             per_data_object_section: false,
+            sia32_private_elf,
             #[cfg(feature = "unwind")]
             unwind_info: false,
         })
@@ -247,6 +275,7 @@ pub struct ObjectModule {
     known_labels: HashMap<(FuncId, CodeOffset), SymbolId>,
     per_function_section: bool,
     per_data_object_section: bool,
+    sia32_private_elf: bool,
     #[cfg(feature = "unwind")]
     unwind: Option<crate::unwind::UnwindBuilder>,
 }
@@ -282,6 +311,7 @@ impl ObjectModule {
             known_labels: HashMap::new(),
             per_function_section: builder.per_function_section,
             per_data_object_section: builder.per_data_object_section,
+            sia32_private_elf: builder.sia32_private_elf,
             #[cfg(feature = "unwind")]
             unwind,
         }
@@ -458,6 +488,11 @@ impl Module for ObjectModule {
             None
         };
         let buffer = &compiled.buffer;
+        if self.sia32_private_elf && !buffer.relocs().is_empty() {
+            return Err(ModuleError::Backend(anyhow!(
+                "SIA32 R0 ELF output supports relocation-free functions only; define SIA relocation semantics before emitting references",
+            )));
+        }
         let relocs = buffer
             .relocs()
             .iter()
@@ -481,6 +516,11 @@ impl Module for ObjectModule {
         bytes: &[u8],
         relocs: &[ModuleReloc],
     ) -> ModuleResult<()> {
+        if self.sia32_private_elf && !relocs.is_empty() {
+            return Err(ModuleError::Backend(anyhow!(
+                "SIA32 R0 ELF output supports relocation-free functions only; define SIA relocation semantics before emitting references",
+            )));
+        }
         let relocs = relocs
             .iter()
             .map(|reloc| self.process_reloc(reloc))
@@ -520,9 +560,15 @@ impl Module for ObjectModule {
             PointerWidth::U32 => Reloc::Abs4,
             PointerWidth::U64 => Reloc::Abs8,
         };
-        let relocs = data
-            .all_relocs(pointer_reloc)
-            .map(|record| self.process_reloc(&record))
+        let data_relocs = data.all_relocs(pointer_reloc).collect::<Vec<_>>();
+        if self.sia32_private_elf && !data_relocs.is_empty() {
+            return Err(ModuleError::Backend(anyhow!(
+                "SIA32 R0 ELF output supports relocation-free data only; define SIA relocation semantics before emitting references",
+            )));
+        }
+        let relocs = data_relocs
+            .iter()
+            .map(|record| self.process_reloc(record))
             .collect::<Vec<_>>();
 
         let section = if custom_section.is_none() {
@@ -748,6 +794,7 @@ impl ObjectModule {
             object: self.object,
             functions: self.functions,
             data_objects: self.data_objects,
+            sia32_private_elf: self.sia32_private_elf,
         }
     }
 
@@ -1136,6 +1183,7 @@ pub struct ObjectProduct {
     pub functions: SecondaryMap<FuncId, Option<(SymbolId, bool)>>,
     /// Symbol IDs for data objects (both declared and defined).
     pub data_objects: SecondaryMap<DataId, Option<(SymbolId, bool)>>,
+    sia32_private_elf: bool,
 }
 
 impl ObjectProduct {
@@ -1154,7 +1202,16 @@ impl ObjectProduct {
     /// Write the object bytes in memory.
     #[inline]
     pub fn emit(self) -> Result<Vec<u8>, object::write::Error> {
-        self.object.write()
+        let mut bytes = self.object.write()?;
+        if self.sia32_private_elf {
+            // `ObjectBuilder` constructs only ELF32 little-endian SIA output.
+            // The bytes at 0x12 are ELF `e_machine`.
+            debug_assert_eq!(&bytes[..4], b"\x7fELF");
+            debug_assert_eq!(bytes[4], 1, "SIA32 must use ELFCLASS32");
+            debug_assert_eq!(bytes[5], 1, "SIA32 must use little-endian ELF");
+            bytes[18..20].copy_from_slice(&ELF_EM_SIA32_PRIVATE.to_le_bytes());
+        }
+        Ok(bytes)
     }
 }
 

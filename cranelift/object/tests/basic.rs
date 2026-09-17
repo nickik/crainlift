@@ -58,6 +58,25 @@ fn define_simple_function(module: &mut ObjectModule) -> FuncId {
 }
 
 #[test]
+fn sia32_r0_emits_a_private_elf32_identity() {
+    let flag_builder = settings::builder();
+    let isa_builder = cranelift_codegen::isa::lookup_by_name("sia32-unknown-none").unwrap();
+    let isa = isa_builder
+        .finish(settings::Flags::new(flag_builder))
+        .unwrap();
+    let mut module =
+        ObjectModule::new(ObjectBuilder::new(isa, "sia32-r0", default_libcall_names()).unwrap());
+
+    define_simple_function(&mut module);
+    let object = module.finish().emit().unwrap();
+
+    assert_eq!(&object[..4], b"\x7fELF");
+    assert_eq!(object[4], 1, "SIA32 uses ELFCLASS32");
+    assert_eq!(object[5], 1, "SIA32 uses little-endian ELF");
+    assert_eq!(u16::from_le_bytes([object[18], object[19]]), 0xff53);
+}
+
+#[test]
 #[should_panic(expected = "Result::unwrap()` on an `Err` value: DuplicateDefinition(\"abc\")")]
 fn panic_on_define_after_finalize() {
     let flag_builder = settings::builder();
