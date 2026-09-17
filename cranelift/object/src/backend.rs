@@ -66,6 +66,11 @@ impl ObjectBuilder {
         libcall_names: Box<dyn Fn(ir::LibCall) -> String + Send + Sync>,
     ) -> ModuleResult<Self> {
         let mut file_flags = object::FileFlags::None;
+        let sia32_bare_metal = matches!(isa.triple().architecture, target_lexicon::Architecture::Sia32)
+            && matches!(
+                isa.triple().binary_format,
+                target_lexicon::BinaryFormat::Unknown
+            );
         let binary_format = match isa.triple().binary_format {
             target_lexicon::BinaryFormat::Elf => object::BinaryFormat::Elf,
             target_lexicon::BinaryFormat::Coff => object::BinaryFormat::Coff,
@@ -75,6 +80,7 @@ impl ObjectBuilder {
                     "binary format wasm is unsupported",
                 )));
             }
+            target_lexicon::BinaryFormat::Unknown if sia32_bare_metal => object::BinaryFormat::Elf,
             target_lexicon::BinaryFormat::Unknown => {
                 return Err(ModuleError::Backend(anyhow!("binary format is unknown")));
             }
