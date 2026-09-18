@@ -202,6 +202,16 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         self.lower_ctx.emit(into_machine_inst(inst));
     }
 
+    fn gen_stack_addr(&mut self, slot: StackSlot, offset: Offset32) -> Reg {
+        let result = self.temp_writable_reg(I32);
+        let inst = self
+            .lower_ctx
+            .abi()
+            .sized_stackslot_addr(slot, i64::from(offset) as u32, result);
+        self.lower_ctx.emit(inst);
+        result.to_reg()
+    }
+
     fn sia_load_const(&mut self, dst: WritableReg, value: u64) -> MInst {
         let value = u32::try_from(value).expect("SIA32 word iconst must fit 32 bits");
         MInst::LoadConst32 { dst, value }
