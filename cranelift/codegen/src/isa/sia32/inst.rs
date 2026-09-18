@@ -60,6 +60,7 @@ pub(crate) enum Inst {
     Store { op: StoreOp, src: Reg, base: Reg },
     IndexedLoad { dst: Writable<Reg>, base: Reg, index: Reg },
     IndexedStore { src: Reg, base: Reg, index: Reg },
+    Fence,
 
     LoadStack { dst: Writable<Reg>, mem: StackAMode, ty: Type },
     StoreStack { src: Reg, mem: StackAMode, ty: Type },
@@ -325,7 +326,7 @@ impl MachInst for Inst {
             Self::Args { args } => for ArgPair { vreg, preg } in args { collector.reg_fixed_def(vreg, *preg); },
             Self::Rets { rets } => for RetPair { vreg, preg } in rets { collector.reg_fixed_use(vreg, *preg); },
             Self::DummyUse { reg } => collector.reg_use(reg),
-            Self::Nop | Self::Trap { .. } | Self::Jump { .. } | Self::Ret => {}
+            Self::Nop | Self::Trap { .. } | Self::Fence | Self::Jump { .. } | Self::Ret => {}
             Self::Mov { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
             Self::Add { dst, lhs, rhs } | Self::TwoOp { dst, lhs, rhs, .. } => {
                 collector.reg_use(lhs); collector.reg_use(rhs); collector.reg_def(dst);
@@ -435,6 +436,7 @@ impl MachInstEmit for Inst {
             Self::Store { op, src, base } => emit_store_zero_offset(code,*op,arch_reg(*src),arch_reg(*base)),
             Self::IndexedLoad { dst, base, index } => put_word(code,encode::lda_w(arch_reg(dst.to_reg()),arch_reg(*base),arch_reg(*index))),
             Self::IndexedStore { src, base, index } => put_word(code,encode::sta_w(arch_reg(*src),arch_reg(*base),arch_reg(*index))),
+            Self::Fence => put_word(code, encode::fence()),
 
             Self::LoadStack { dst, mem, ty } => {
                 let off=frame_stack_offset(mem,&state.frame_layout);
