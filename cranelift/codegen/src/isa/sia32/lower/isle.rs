@@ -285,6 +285,10 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         }
     }
 
+    fn sia_fence(&mut self) -> MInst {
+        MInst::Fence
+    }
+
     fn sia_jump(&mut self, target: MachLabel) -> MInst {
         MInst::Jump { target }
     }
