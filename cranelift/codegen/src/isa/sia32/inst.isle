@@ -77,6 +77,7 @@
       (base Reg)
       (offset i32)
       (ty Type))
+    (Fence)
     (Jump
       (target MachLabel))
     (BrNz
@@ -114,6 +115,8 @@
 (extern constructor sia_load_offset sia_load_offset)
 (decl sia_store_offset (Reg Reg i32 Type) MInst)
 (extern constructor sia_store_offset sia_store_offset)
+(decl sia_fence () MInst)
+(extern constructor sia_fence sia_fence)
 (decl sia_jump (MachLabel) MInst)
 (extern constructor sia_jump sia_jump)
 (decl sia_brnz (Reg MachLabel MachLabel) MInst)
