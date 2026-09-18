@@ -137,3 +137,8 @@
 (rule (lower_branch (brif cond _ _) (two_targets taken not_taken))
       (let ((test Reg (put_in_reg cond)))
         (emit_side_effect (SideEffectNoResult.Inst (sia_brnz test taken not_taken)))))
+
+;; SIA32-MEM defines SIA-TSO and one architectural full data-memory FENCE.
+;; Cranelift's generic fence therefore maps directly to that instruction.
+(rule (lower (fence))
+      (side_effect (SideEffectNoResult.Inst (sia_fence))))
