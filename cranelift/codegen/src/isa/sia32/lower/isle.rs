@@ -191,6 +191,7 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             taken: *taken,
             not_taken: *not_taken,
         },
+        MInst::Fence {} => MachineInst::Fence,
     }
 }
 
