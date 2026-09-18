@@ -109,6 +109,16 @@
 (rule (lower (ireduce $I8 x @ (value_type $I32))) (output_value x))
 (rule (lower (ireduce $I16 x @ (value_type $I32))) (output_value x))
 
+
+;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; stack_addr is an ABI pseudo: keep the StackAMode until post-regalloc
+;; emission, where the finalized frame layout determines the SP-relative
+;; offset. This is the same contract already implemented by Inst::StackAddr.
+(rule (lower (stack_addr $I32 ss offset))
+      (let ((dst WritableReg (temp_writable_reg $I32)))
+        (sia_emit_result (sia_stack_addr dst (stack_amode ss offset)) dst)))
+
 ;;;; Scalar memory ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (decl sia_load_result (Type Value i32) InstOutput)
