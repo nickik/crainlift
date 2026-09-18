@@ -85,6 +85,8 @@
       (taken MachLabel)
       (not_taken MachLabel))))
 
+(decl sia_stack_addr (WritableReg StackAMode) MInst)
+(extern constructor sia_stack_addr sia_stack_addr)
 (decl sia_load_const (WritableReg u64) MInst)
 (extern constructor sia_load_const sia_load_const)
 (decl sia_add (WritableReg Reg Reg) MInst)
