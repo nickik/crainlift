@@ -112,12 +112,10 @@
 
 ;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; stack_addr is an ABI pseudo: keep the StackAMode until post-regalloc
-;; emission, where the finalized frame layout determines the SP-relative
-;; offset. This is the same contract already implemented by Inst::StackAddr.
+;; stack_addr is an ABI pseudo: keep the stack-slot identity until post-regalloc
+;; emission, where the finalized frame layout determines the SP-relative offset.
 (rule (lower (stack_addr $I32 ss offset))
-      (let ((dst WritableReg (temp_writable_reg $I32)))
-        (sia_emit_result (sia_stack_addr dst (stack_amode ss offset)) dst)))
+      (output (value_reg (gen_stack_addr ss offset))))
 
 ;;;; Scalar memory ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
