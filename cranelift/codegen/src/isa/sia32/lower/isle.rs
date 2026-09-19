@@ -303,44 +303,40 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
     fn gen_call_info(
         &mut self,
         sig: Sig,
-        name: ExternalName,
+        dest: ExternalName,
         uses: CallArgList,
         defs: CallRetList,
         try_call_info: OptionTryCallInfo,
         patchable: bool,
     ) -> BoxCallInfo {
-        Box::new(CallInfo {
-            dest: name,
-            uses,
-            defs,
-            clobbers: self.lower_ctx.abi().get_regs_clobbered_by_call(sig.call_conv, false),
-            callee_pop_size: 0,
-            caller_conv: self.lower_ctx.abi().call_conv(),
-            callee_conv: sig.call_conv,
-            try_call_info,
-            patchable,
-        })
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, patchable),
+        )
     }
 
     fn gen_call_ind_info(
         &mut self,
         sig: Sig,
-        target: Reg,
+        dest: Reg,
         uses: CallArgList,
         defs: CallRetList,
         try_call_info: OptionTryCallInfo,
     ) -> BoxCallIndInfo {
-        Box::new(CallInfo {
-            dest: target,
-            uses,
-            defs,
-            clobbers: self.lower_ctx.abi().get_regs_clobbered_by_call(sig.call_conv, false),
-            callee_pop_size: 0,
-            caller_conv: self.lower_ctx.abi().call_conv(),
-            callee_conv: sig.call_conv,
-            try_call_info,
-            patchable: false,
-        })
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, false),
+        )
     }
 
     fn sia_fence(&mut self) -> MInst {
