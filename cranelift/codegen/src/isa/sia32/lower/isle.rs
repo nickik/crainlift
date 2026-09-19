@@ -8,7 +8,7 @@ use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
 use crate::machinst::isle::*;
 use crate::machinst::{
-    CallArgList, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
+    CallArgList, CallRetList, CallInfo, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
     VCodeConstantData, VCodeInst,
 };
 use crate::{
@@ -18,6 +18,8 @@ use crate::{
     },
 };
 use alloc::boxed::Box;
+type BoxCallInfo = Box<CallInfo<ExternalName>>;
+type BoxCallIndInfo = Box<CallInfo<Reg>>;
 use alloc::vec::Vec;
 use regalloc2::PReg;
 
@@ -181,6 +183,8 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             offset: *offset,
             ty: *ty,
         },
+        MInst::Call { info } => MachineInst::Call { info: info.clone() },
+        MInst::CallInd { info } => MachineInst::CallInd { info: info.clone() },
         MInst::Jump { target } => MachineInst::Jump { target: *target },
         MInst::BrNz {
             test,
@@ -191,6 +195,7 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             taken: *taken,
             not_taken: *not_taken,
         },
+        MInst::Fence {} => MachineInst::Fence,
     }
 }
 
@@ -199,6 +204,16 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn emit(&mut self, inst: &MInst) -> Unit {
         self.lower_ctx.emit(into_machine_inst(inst));
+    }
+
+    fn gen_stack_addr(&mut self, slot: StackSlot, offset: Offset32) -> Reg {
+        let result = self.temp_writable_reg(I32);
+        let inst = self
+            .lower_ctx
+            .abi()
+            .sized_stackslot_addr(slot, i64::from(offset) as u32, result);
+        self.lower_ctx.emit(inst);
+        result.to_reg()
     }
 
     fn sia_load_const(&mut self, dst: WritableReg, value: u64) -> MInst {
@@ -283,6 +298,49 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
             offset,
             ty,
         }
+    }
+
+    fn gen_call_info(
+        &mut self,
+        sig: Sig,
+        dest: ExternalName,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: OptionTryCallInfo,
+        patchable: bool,
+    ) -> BoxCallInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, patchable),
+        )
+    }
+
+    fn gen_call_ind_info(
+        &mut self,
+        sig: Sig,
+        dest: Reg,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: OptionTryCallInfo,
+    ) -> BoxCallIndInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, false),
+        )
+    }
+
+    fn sia_fence(&mut self) -> MInst {
+        MInst::Fence
     }
 
     fn sia_jump(&mut self, target: MachLabel) -> MInst {
