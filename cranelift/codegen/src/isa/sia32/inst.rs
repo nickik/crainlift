@@ -42,12 +42,18 @@ pub(crate) enum LoadOp { I8, U8, I16, U16, I32 }
 pub(crate) enum StoreOp { I8, I16, I32 }
 
 #[derive(Clone, Debug)]
+pub(crate) enum PrivilegedOp {
+    SoftwareTrap { code: u8 }, SRead { selector: u8 }, SWrite { selector: u8 }, SSwapScratch,
+    SRet, SRetCtx, TlbFence, TlbFenceVa, TlbFenceAsid, Wfi, SyncI, Fence,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) enum Inst {
     Args { args: Vec<ArgPair> },
     Rets { rets: Vec<RetPair> },
     DummyUse { reg: Reg },
     Nop,
-    Trap { code: u8 },
+    SoftwareTrap { code: u8 },
     TrapIfNz { test: Reg, code: ir::TrapCode },
     TrapIfZ { test: Reg, code: ir::TrapCode },
     Mov { dst: Writable<Reg>, src: Reg },
@@ -63,6 +69,16 @@ pub(crate) enum Inst {
     IndexedLoad { dst: Writable<Reg>, base: Reg, index: Reg },
     IndexedStore { src: Reg, base: Reg, index: Reg },
     Fence,
+    SRead { dst: Writable<Reg>, selector: u8 },
+    SWrite { src: Reg, selector: u8 },
+    SSwapScratch { dst: Writable<Reg>, src: Reg },
+    SRet,
+    SRetCtx { src: Reg },
+    TlbFence,
+    TlbFenceVa { src: Reg },
+    TlbFenceAsid { src: Reg },
+    Wfi,
+    SyncI,
 
     LoadStack { dst: Writable<Reg>, mem: StackAMode, ty: Type },
     StoreStack { src: Reg, mem: StackAMode, ty: Type },
@@ -243,13 +259,22 @@ fn collect_call_operands<T>(info: &mut CallInfo<T>, collector: &mut impl Operand
     for CallArgPair { vreg, preg } in &mut info.uses {
         collector.reg_fixed_use(vreg, *preg);
     }
+    // Register returns are definitions of ABI return registers, but those
+    // registers are also present in the call clobber set. regalloc2 rejects an
+    // instruction that simultaneously fixed-defs and clobbers the same preg.
+    // Remove explicit return registers from this call's clobber set before
+    // reporting the remaining clobbers.
+    let mut clobbers = info.clobbers;
     for CallRetPair { vreg, location } in &mut info.defs {
         match location {
-            RetLocation::Reg(preg, ..) => collector.reg_fixed_def(vreg, *preg),
+            RetLocation::Reg(preg, ..) => {
+                collector.reg_fixed_def(vreg, *preg);
+                clobbers.remove(preg.to_real_reg().expect("SIA32 ABI return register must be physical").into());
+            }
             RetLocation::Stack(..) => collector.any_def(vreg),
         }
     }
-    collector.reg_clobbers(info.clobbers);
+    collector.reg_clobbers(clobbers);
     if let Some(try_call_info) = &mut info.try_call_info {
         try_call_info.collect_operands(collector);
     }
@@ -330,7 +355,12 @@ impl MachInst for Inst {
             Self::Args { args } => for ArgPair { vreg, preg } in args { collector.reg_fixed_def(vreg, *preg); },
             Self::Rets { rets } => for RetPair { vreg, preg } in rets { collector.reg_fixed_use(vreg, *preg); },
             Self::DummyUse { reg } => collector.reg_use(reg),
-            Self::Nop | Self::Trap { .. } | Self::Fence | Self::Jump { .. } | Self::Ret => {}
+            Self::Nop | Self::SoftwareTrap { .. } | Self::Fence | Self::SRet | Self::TlbFence
+            | Self::Wfi | Self::SyncI | Self::Jump { .. } | Self::Ret => {}
+            Self::SRead { dst, .. } => collector.reg_def(dst),
+            Self::SWrite { src, .. } | Self::SRetCtx { src } | Self::TlbFenceVa { src }
+            | Self::TlbFenceAsid { src } => collector.reg_use(src),
+            Self::SSwapScratch { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
             Self::TrapIfNz { test, .. } | Self::TrapIfZ { test, .. } => collector.reg_use(test),
             Self::Mov { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
             Self::Add { dst, lhs, rhs } | Self::TwoOp { dst, lhs, rhs, .. } => {
@@ -361,7 +391,7 @@ impl MachInst for Inst {
 
     fn is_move(&self) -> Option<(Writable<Reg>, Reg)> { if let Self::Mov { dst, src } = *self { Some((dst, src)) } else { None } }
     fn is_term(&self) -> MachTerminator { match self { Self::Rets { .. } | Self::Ret => MachTerminator::Ret, Self::Jump { .. } | Self::BrNz { .. } => MachTerminator::Branch, _ => MachTerminator::None } }
-    fn is_trap(&self) -> bool { matches!(self, Self::Trap { .. }) }
+    fn is_trap(&self) -> bool { false }
     fn is_args(&self) -> bool { matches!(self, Self::Args { .. }) }
     fn call_type(&self) -> CallType { if matches!(self, Self::Call { .. } | Self::CallInd { .. }) { CallType::Regular } else { CallType::None } }
     fn is_included_in_clobbers(&self) -> bool { !self.is_args() }
@@ -376,8 +406,8 @@ impl MachInst for Inst {
     fn gen_nop_units() -> Vec<Vec<u8>> { vec![encode::NOP.to_le_bytes().to_vec()] }
     fn worst_case_size() -> CodeOffset { 24 }
     fn worst_case_island_growth() -> CodeOffset { 34 }
-    fn is_safepoint(&self) -> bool { self.is_trap() || matches!(self, Self::Call { .. } | Self::CallInd { .. }) }
-    fn function_alignment() -> FunctionAlignment { FunctionAlignment { minimum: 2, preferred: 4 } }
+    fn is_safepoint(&self) -> bool { matches!(self, Self::SoftwareTrap { .. } | Self::Call { .. } | Self::CallInd { .. }) }
+    fn function_alignment() -> FunctionAlignment { FunctionAlignment { minimum: 4, preferred: 4 } }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -406,7 +436,17 @@ impl MachInstEmit for Inst {
         match self {
             Self::Args { .. } | Self::Rets { .. } | Self::DummyUse { .. } => {}
             Self::Nop => put_word(code, encode::NOP),
-            Self::Trap { code: trap_code } => put_word(code, encode::trap(*trap_code).expect("backend trap code must be encodable")),
+            Self::SRead { dst, selector } => put_word(code, encode::sread(arch_reg(dst.to_reg()), *selector).expect("validated SREAD selector")),
+            Self::SWrite { src, selector } => put_word(code, encode::swrite(arch_reg(*src), *selector).expect("validated SWRITE selector")),
+            Self::SSwapScratch { dst, src } => { let dst = arch_reg(dst.to_reg()); let src = arch_reg(*src); if dst != src { put_word(code, encode::mov(dst, src)); } put_word(code, encode::sswap_scratch(dst)); },
+            Self::SRet => put_word(code, encode::sret()),
+            Self::SRetCtx { src } => put_word(code, encode::sretctx(arch_reg(*src))),
+            Self::TlbFence => put_word(code, encode::tlbfence()),
+            Self::TlbFenceVa { src } => put_word(code, encode::tlbfence_va(arch_reg(*src))),
+            Self::TlbFenceAsid { src } => put_word(code, encode::tlbfence_asid(arch_reg(*src))),
+            Self::Wfi => put_word(code, encode::wfi()),
+            Self::SyncI => put_word(code, encode::sync_i()),
+            Self::SoftwareTrap { code: trap_code } => put_word(code, encode::trap(*trap_code).expect("backend trap code must be encodable")),
             Self::TrapIfNz { test, code: _ } => {
                 let trap = code.get_label();
                 let done = code.get_label();
@@ -553,6 +593,13 @@ mod tests {
     #[test]
     fn literal_pool_threshold_keeps_small_values_inline(){
         assert!(const_digits(63).len() <= 2); assert!(const_digits(128).len() <= 2); assert!(const_digits(0xdead_beef).len() > 2);
+    }
+    #[test]
+    #[test]
+    fn function_alignment_preserves_ldpc_word_phase(){
+        let a=Inst::function_alignment();
+        assert_eq!(a.minimum,4);
+        assert_eq!(a.preferred,4);
     }
     #[test]
     fn indirect_call_is_a_real_regular_call(){
