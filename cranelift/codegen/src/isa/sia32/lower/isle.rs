@@ -388,6 +388,8 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn sia_m_sread(&mut self, dst: WritableReg, selector: u8) -> MInst { MInst::SRead { dst, selector } }
     fn sia_m_swrite(&mut self, src: Reg, selector: u8) -> MInst { MInst::SWrite { src, selector } }
+    fn sia_m_gpr_read(&mut self, dst: WritableReg, index: u8) -> MInst { assert!((1..=11).contains(&index) || index == 15); MInst::ReadFixedGpr { dst, index } }
+    fn sia_m_gpr_write(&mut self, src: Reg, index: u8) -> MInst { assert!((1..=11).contains(&index) || index == 15); MInst::WriteFixedGpr { src, index } }
     fn sia_m_sret(&mut self) -> MInst { MInst::SRet {} }
     fn sia_m_tlbfence(&mut self) -> MInst { MInst::TlbFence {} }
     fn sia_m_tlbfence_va(&mut self, src: Reg) -> MInst { MInst::TlbFenceVa { src } }
