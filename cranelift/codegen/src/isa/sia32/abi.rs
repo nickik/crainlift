@@ -355,10 +355,12 @@ impl ABIMachineSpec for Sia32MachineDeps {
 
     fn get_regs_clobbered_by_call(call_conv_of_callee: isa::CallConv, _is_exception: bool) -> PRegSet {
         ensure_call_conv(call_conv_of_callee).expect("unsupported SIA32 calling convention");
+        // Only allocatable caller-saved registers belong in the regalloc
+        // clobber set. r12 (ABI scratch) and r14 (LR) are reserved from
+        // allocation and are handled explicitly by call emission/frame code.
         PRegSet::empty()
             .with(regs::preg(1)).with(regs::preg(2)).with(regs::preg(3)).with(regs::preg(4))
             .with(regs::preg(5)).with(regs::preg(6)).with(regs::preg(7)).with(regs::preg(8))
-            .with(regs::preg(12)).with(regs::preg(14))
     }
 
     fn get_ext_mode(call_conv: isa::CallConv, specified: ir::ArgumentExtension, _location: ABIArgLocation) -> ir::ArgumentExtension {
@@ -393,9 +395,7 @@ mod tests {
     fn call_clobbers_match_frozen_abi_plus_reserved_temporaries() {
         let set = Sia32MachineDeps::get_regs_clobbered_by_call(isa::CallConv::SystemV, false);
         for n in 1..=8 { assert!(set.contains(regs::preg(n))); }
-        assert!(set.contains(regs::preg(12)));
-        assert!(set.contains(regs::preg(14)));
-        for n in [9, 10, 11, 15] { assert!(!set.contains(regs::preg(n))); }
+        for n in [0, 9, 10, 11, 12, 13, 14, 15] { assert!(!set.contains(regs::preg(n))); }
     }
 
     #[test]
