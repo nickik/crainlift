@@ -17,7 +17,6 @@ impl Reg {
     pub const ZERO: Self = Self(0);
     pub const SP: Self = Self(13);
     pub const LR: Self = Self(14);
-    pub const FP: Self = Self(15);
     pub const SCRATCH: Self = Self(12);
 
     pub const fn new(index: u8) -> Option<Self> {
@@ -28,7 +27,6 @@ impl Reg {
     pub const fn is_zero(self) -> bool { self.0 == 0 }
     pub const fn is_sp(self) -> bool { self.0 == 13 }
     pub const fn is_lr(self) -> bool { self.0 == 14 }
-    pub const fn is_fp(self) -> bool { self.0 == 15 }
     pub const fn is_backend_scratch(self) -> bool { self.0 == 12 }
     pub const fn normally_allocatable(self) -> bool { matches!(self.0, 1..=11 | 15) }
     pub const fn caller_saved(self) -> bool { matches!(self.0, 1..=8) }
@@ -41,7 +39,7 @@ impl Reg {
 impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            13 => f.write_str("sp"), 14 => f.write_str("lr"), 15 => f.write_str("r15"),
+            13 => f.write_str("sp"), 14 => f.write_str("lr"),
             n => write!(f, "r{n}"),
         }
     }
@@ -62,7 +60,6 @@ pub const fn mach_reg(index: u8) -> MachReg { MachReg::from_real_reg(preg(index)
 pub const fn zero_reg() -> MachReg { mach_reg(Reg::ZERO.index()) }
 pub const fn stack_reg() -> MachReg { mach_reg(Reg::SP.index()) }
 pub const fn link_reg() -> MachReg { mach_reg(Reg::LR.index()) }
-pub const fn fp_reg() -> MachReg { mach_reg(Reg::FP.index()) }
 pub const fn scratch_reg() -> MachReg { mach_reg(Reg::SCRATCH.index()) }
 /// Fixed temporary used by generic stack-limit/prologue machinery.
 /// It aliases the backend scratch register so it can never conflict with an
@@ -72,7 +69,6 @@ pub const fn stacklimit_reg() -> MachReg { scratch_reg() }
 pub fn writable_zero_reg() -> Writable<MachReg> { Writable::from_reg(zero_reg()) }
 pub fn writable_stack_reg() -> Writable<MachReg> { Writable::from_reg(stack_reg()) }
 pub fn writable_link_reg() -> Writable<MachReg> { Writable::from_reg(link_reg()) }
-pub fn writable_fp_reg() -> Writable<MachReg> { Writable::from_reg(fp_reg()) }
 pub fn writable_scratch_reg() -> Writable<MachReg> { Writable::from_reg(scratch_reg()) }
 
 /// Initial SIA32 register-allocation environment.
