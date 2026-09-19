@@ -3409,7 +3409,7 @@ pub(crate) fn define(
     // freestanding pipeline. Backends without SIA32 semantics reject these.
     ig.push(Inst::new("sia_trap", "SIA32 architectural TRAP imm8.", &formats.nullary_imm8)
         .operands_in(&[Operand::new("code", &imm.uimm8)]).other_side_effects());
-    ig.push(Inst::new("sia_sread", "Read a SIA32-P system register selected by imm8.", &formats.nullary_imm8)
+    ig.push(Inst::new("sia_gpr_read", "Read a fixed SIA32 architectural GPR selected by imm8. Reserved for ABI/trap boundaries.", &formats.nullary_imm8)\n        .operands_in(&[Operand::new("register", &imm.uimm8)])\n        .operands_out(&[Operand::new("value", i32_)]).other_side_effects());\n    ig.push(Inst::new("sia_gpr_write", "Write a fixed SIA32 architectural GPR selected by imm8. Reserved for ABI/trap boundaries.", &formats.binary_imm8)\n        .operands_in(&[Operand::new("value", i32_), Operand::new("register", &imm.uimm8)]).other_side_effects());\n    ig.push(Inst::new("sia_sread", "Read a SIA32-P system register selected by imm8.", &formats.nullary_imm8)
         .operands_in(&[Operand::new("selector", &imm.uimm8)])
         .operands_out(&[Operand::new("value", i32_)]).other_side_effects());
     ig.push(Inst::new("sia_swrite", "Write a SIA32-P system register selected by imm8.", &formats.binary_imm8)
