@@ -85,12 +85,12 @@ pub const fn create_reg_environment() -> MachineEnv {
             .with(preg(5)).with(preg(6)).with(preg(7)).with(preg(8)),
         PRegSet::empty(), PRegSet::empty(),
     ];
-    // Keep r15/fp reserved from general allocation. The current ABI/prologue
-    // machinery treats it as a fixed frame register, so offering it to
-    // regalloc creates an unsatisfiable live-range constraint in larger
-    // protected-mode functions.
+    // r15 is an ordinary callee-saved register in the current SIA32 ABI.
+    // Stack slots are SP-relative and the prologue does not establish a fixed
+    // frame pointer, so withholding r15 needlessly reduces the allocator to
+    // eleven registers and makes call-heavy generated code unallocatable.
     let non_preferred_regs_by_class = [
-        PRegSet::empty().with(preg(9)).with(preg(10)).with(preg(11)),
+        PRegSet::empty().with(preg(9)).with(preg(10)).with(preg(11)).with(preg(15)),
         PRegSet::empty(), PRegSet::empty(),
     ];
     MachineEnv {
