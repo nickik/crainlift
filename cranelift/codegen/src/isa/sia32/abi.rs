@@ -243,7 +243,9 @@ impl ABIMachineSpec for Sia32MachineDeps {
         clobbered_callee_saves.sort_by_key(|reg| reg.to_reg().hw_enc());
         clobbered_callee_saves.dedup_by_key(|reg| reg.to_reg().hw_enc());
 
-        let setup_area_size = if function_calls == FunctionCalls::Regular { 8 } else { 0 };
+        // LR is saved in the ordinary clobber/frame area below. Do not also
+        // expose a separate setup-area displacement to StackAMode accounting.
+        let setup_area_size = 0;
         let clobber_size = if clobbered_callee_saves.is_empty() { 0 } else { align_to(clobbered_callee_saves.len() as u32 * 4, 8) };
 
         FrameLayout {
@@ -263,21 +265,14 @@ impl ABIMachineSpec for Sia32MachineDeps {
     fn gen_prologue_frame_setup(call_conv: isa::CallConv, _flags: &settings::Flags, _isa_flags: &SiaFlags, frame_layout: &FrameLayout) -> SmallInstVec<Inst> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         let mut out = SmallInstVec::new();
-        if frame_layout.setup_area_size != 0 {
-            debug_assert_eq!(frame_layout.setup_area_size, 8);
-            out.push(Inst::SpAdjust { amount: -8 });
-            out.push(Inst::StoreBaseOffset { src: regs::link_reg(), base: regs::stack_reg(), offset: 0, ty: I32 });
-        }
+        let _ = frame_layout;
         out
     }
 
     fn gen_epilogue_frame_restore(call_conv: isa::CallConv, _flags: &settings::Flags, _isa_flags: &SiaFlags, frame_layout: &FrameLayout) -> SmallInstVec<Inst> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         let mut out = SmallInstVec::new();
-        if frame_layout.setup_area_size != 0 {
-            out.push(Inst::LoadBaseOffset { dst: regs::writable_link_reg(), base: regs::stack_reg(), offset: 0, ty: I32 });
-            out.push(Inst::SpAdjust { amount: 8 });
-        }
+        let _ = frame_layout;
         out
     }
 
@@ -297,14 +292,22 @@ impl ABIMachineSpec for Sia32MachineDeps {
     fn gen_clobber_save(call_conv: isa::CallConv, _flags: &settings::Flags, frame_layout: &FrameLayout) -> SmallVec<[Inst; 16]> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         let mut out = SmallVec::new();
-        let stack_size = frame_layout.clobber_size
+        let lr_size = if frame_layout.function_calls == FunctionCalls::Regular { 8 } else { 0 };
+        let stack_size = lr_size
+            + frame_layout.clobber_size
             + frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
             + frame_layout.outgoing_args_size;
         if stack_size == 0 { return out; }
         out.push(Inst::SpAdjust { amount: -(stack_size as i32) });
         // Keep callee saves above the fixed/outgoing frame so StackAMode::Slot
         // offsets remain based at the current SP and never address above the caller SP.
-        let save_base = frame_layout.fixed_frame_storage_size + frame_layout.outgoing_args_size;
+        let save_base = frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
+            + frame_layout.outgoing_args_size;
+        if lr_size != 0 {
+            out.push(Inst::StoreBaseOffset { src: regs::link_reg(), base: regs::stack_reg(), offset: (save_base + frame_layout.clobber_size) as i32, ty: I32 });
+        }
         for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
             out.push(Inst::StoreBaseOffset { src: Reg::from(reg.to_reg()), base: regs::stack_reg(), offset: (save_base as i32) + (i as i32) * 4, ty: I32 });
         }
@@ -314,11 +317,19 @@ impl ABIMachineSpec for Sia32MachineDeps {
     fn gen_clobber_restore(call_conv: isa::CallConv, _flags: &settings::Flags, frame_layout: &FrameLayout) -> SmallVec<[Inst; 16]> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         let mut out = SmallVec::new();
-        let stack_size = frame_layout.clobber_size
+        let lr_size = if frame_layout.function_calls == FunctionCalls::Regular { 8 } else { 0 };
+        let stack_size = lr_size
+            + frame_layout.clobber_size
             + frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
             + frame_layout.outgoing_args_size;
         if stack_size == 0 { return out; }
-        let save_base = frame_layout.fixed_frame_storage_size + frame_layout.outgoing_args_size;
+        let save_base = frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
+            + frame_layout.outgoing_args_size;
+        if lr_size != 0 {
+            out.push(Inst::LoadBaseOffset { dst: regs::writable_link_reg(), base: regs::stack_reg(), offset: (save_base + frame_layout.clobber_size) as i32, ty: I32 });
+        }
         for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
             out.push(Inst::LoadBaseOffset { dst: Writable::from_reg(Reg::from(reg.to_reg())), base: regs::stack_reg(), offset: (save_base as i32) + (i as i32) * 4, ty: I32 });
         }
