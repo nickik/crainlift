@@ -8,7 +8,7 @@ use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
 use crate::machinst::isle::*;
 use crate::machinst::{
-    CallArgList, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
+    CallArgList, CallRetList, CallInfo, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
     VCodeConstantData, VCodeInst,
 };
 use crate::{
@@ -18,6 +18,8 @@ use crate::{
     },
 };
 use alloc::boxed::Box;
+type BoxCallInfo = Box<CallInfo<ExternalName>>;
+type BoxCallIndInfo = Box<CallInfo<Reg>>;
 use alloc::vec::Vec;
 use regalloc2::PReg;
 
@@ -181,6 +183,8 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             offset: *offset,
             ty: *ty,
         },
+        MInst::Call { info } => MachineInst::Call { info: info.clone() },
+        MInst::CallInd { info } => MachineInst::CallInd { info: info.clone() },
         MInst::Jump { target } => MachineInst::Jump { target: *target },
         MInst::BrNz {
             test,
@@ -294,6 +298,49 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
             offset,
             ty,
         }
+    }
+
+    fn gen_call_info(
+        &mut self,
+        sig: Sig,
+        name: ExternalName,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: OptionTryCallInfo,
+        patchable: bool,
+    ) -> BoxCallInfo {
+        Box::new(CallInfo {
+            dest: name,
+            uses,
+            defs,
+            clobbers: self.lower_ctx.abi().get_regs_clobbered_by_call(sig.call_conv, false),
+            callee_pop_size: 0,
+            caller_conv: self.lower_ctx.abi().call_conv(),
+            callee_conv: sig.call_conv,
+            try_call_info,
+            patchable,
+        })
+    }
+
+    fn gen_call_ind_info(
+        &mut self,
+        sig: Sig,
+        target: Reg,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: OptionTryCallInfo,
+    ) -> BoxCallIndInfo {
+        Box::new(CallInfo {
+            dest: target,
+            uses,
+            defs,
+            clobbers: self.lower_ctx.abi().get_regs_clobbered_by_call(sig.call_conv, false),
+            callee_pop_size: 0,
+            caller_conv: self.lower_ctx.abi().call_conv(),
+            callee_conv: sig.call_conv,
+            try_call_info,
+            patchable: false,
+        })
     }
 
     fn sia_fence(&mut self) -> MInst {
