@@ -299,12 +299,15 @@ impl ABIMachineSpec for Sia32MachineDeps {
         let mut out = SmallVec::new();
         let stack_size = frame_layout.clobber_size
             + frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
             + frame_layout.outgoing_args_size;
         if stack_size == 0 { return out; }
         out.push(Inst::SpAdjust { amount: -(stack_size as i32) });
         // Keep callee saves above the fixed/outgoing frame so StackAMode::Slot
         // offsets remain based at the current SP and never address above the caller SP.
-        let save_base = frame_layout.fixed_frame_storage_size + frame_layout.outgoing_args_size;
+        let save_base = frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
+            + frame_layout.outgoing_args_size;
         for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
             out.push(Inst::StoreBaseOffset { src: Reg::from(reg.to_reg()), base: regs::stack_reg(), offset: (save_base as i32) + (i as i32) * 4, ty: I32 });
         }
@@ -316,9 +319,12 @@ impl ABIMachineSpec for Sia32MachineDeps {
         let mut out = SmallVec::new();
         let stack_size = frame_layout.clobber_size
             + frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
             + frame_layout.outgoing_args_size;
         if stack_size == 0 { return out; }
-        let save_base = frame_layout.fixed_frame_storage_size + frame_layout.outgoing_args_size;
+        let save_base = frame_layout.fixed_frame_storage_size
+            + frame_layout.stackslots_size
+            + frame_layout.outgoing_args_size;
         for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
             out.push(Inst::LoadBaseOffset { dst: Writable::from_reg(Reg::from(reg.to_reg())), base: regs::stack_reg(), offset: (save_base as i32) + (i as i32) * 4, ty: I32 });
         }
