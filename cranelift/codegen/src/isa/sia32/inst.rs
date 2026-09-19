@@ -12,7 +12,7 @@ use crate::ir::types::{I8, I16, I32, I64};
 use crate::ir::{self, ExternalName, Type};
 use crate::isa::FunctionAlignment;
 use crate::machinst::{
-    ArgPair, CallArgPair, CallInfo, CallRetPair, CallType, Callee, FrameLayout, MachBuffer,
+    ArgPair, CallArgPair, CallInfo, CallRetPair, CallType, Callee, FrameLayout, FunctionCalls, MachBuffer,
     MachInst, MachInstEmit, MachInstEmitState, MachLabel, MachTerminator, OperandVisitor, Reg,
     RetLocation, RetPair, StackAMode, Writable,
 };
