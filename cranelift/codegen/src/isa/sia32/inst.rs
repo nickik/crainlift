@@ -53,7 +53,7 @@ pub(crate) enum Inst {
     Rets { rets: Vec<RetPair> },
     DummyUse { reg: Reg },
     Nop,
-    Trap { code: u8 },
+    SoftwareTrap { code: u8 },
     TrapIfNz { test: Reg, code: ir::TrapCode },
     TrapIfZ { test: Reg, code: ir::TrapCode },
     Mov { dst: Writable<Reg>, src: Reg },
