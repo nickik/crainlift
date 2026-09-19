@@ -133,6 +133,27 @@
             (base Reg (put_in_reg addr)))
         (side_effect (SideEffectNoResult.Inst (sia_store_offset value base offset ty)))))
 
+;;;; Calls ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule (lower (call (func_ref_data sig_ref name _ patchable) args))
+      (let ((output ValueRegsVec (gen_call_output sig_ref))
+            (abi Sig (abi_sig sig_ref))
+            (uses CallArgList (gen_call_args abi args))
+            (defs CallRetList (gen_call_rets abi output))
+            (info BoxCallInfo (gen_call_info abi name uses defs (try_call_none) patchable))
+            (_ Unit (emit_side_effect (call_impl info))))
+        output))
+
+(rule (lower (call_indirect sig_ref ptr args))
+      (let ((output ValueRegsVec (gen_call_output sig_ref))
+            (abi Sig (abi_sig sig_ref))
+            (target Reg (put_in_reg ptr))
+            (uses CallArgList (gen_call_args abi args))
+            (defs CallRetList (gen_call_rets abi output))
+            (info BoxCallIndInfo (gen_call_ind_info abi target uses defs (try_call_none)))
+            (_ Unit (emit_side_effect (call_ind_impl info))))
+        output))
+
 ;;;; Return and control flow ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; The ABI generates the Rets pseudo and architectural RET.
