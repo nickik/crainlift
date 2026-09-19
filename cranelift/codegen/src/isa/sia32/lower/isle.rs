@@ -91,6 +91,12 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             lhs: *lhs,
             rhs: *rhs,
         },
+        MInst::CmpLtu { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::CmpLtu,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
         MInst::Sub { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Sub,
             dst: *dst,
@@ -225,6 +231,10 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn sia_add(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
         MInst::Add { dst, lhs, rhs }
+    }
+
+    fn sia_cmpltu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::CmpLtu { dst, lhs, rhs }
     }
 
     fn sia_sub(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
