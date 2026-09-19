@@ -48,6 +48,8 @@ pub(crate) enum Inst {
     DummyUse { reg: Reg },
     Nop,
     Trap { code: u8 },
+    TrapIfNz { test: Reg, code: ir::TrapCode },
+    TrapIfZ { test: Reg, code: ir::TrapCode },
     Mov { dst: Writable<Reg>, src: Reg },
     Add { dst: Writable<Reg>, lhs: Reg, rhs: Reg },
     Unary { op: UnaryOp, dst: Writable<Reg>, src: Reg },
@@ -327,6 +329,7 @@ impl MachInst for Inst {
             Self::Rets { rets } => for RetPair { vreg, preg } in rets { collector.reg_fixed_use(vreg, *preg); },
             Self::DummyUse { reg } => collector.reg_use(reg),
             Self::Nop | Self::Trap { .. } | Self::Fence | Self::Jump { .. } | Self::Ret => {}
+            Self::TrapIfNz { test, .. } | Self::TrapIfZ { test, .. } => collector.reg_use(test),
             Self::Mov { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
             Self::Add { dst, lhs, rhs } | Self::TwoOp { dst, lhs, rhs, .. } => {
                 collector.reg_use(lhs); collector.reg_use(rhs); collector.reg_def(dst);
@@ -402,6 +405,22 @@ impl MachInstEmit for Inst {
             Self::Args { .. } | Self::Rets { .. } | Self::DummyUse { .. } => {}
             Self::Nop => put_word(code, encode::NOP),
             Self::Trap { code: trap_code } => put_word(code, encode::trap(*trap_code).expect("backend trap code must be encodable")),
+            Self::TrapIfNz { test, code: _ } => {
+                let done = code.get_label();
+                let branch_at = code.cur_offset();
+                code.use_label_at_offset(branch_at, done, LabelUse::Cond7);
+                put_word(code, encode::bz(arch_reg(*test), 0).unwrap());
+                put_word(code, encode::trap(0).unwrap());
+                code.bind_label(done, state.ctrl_plane_mut());
+            }
+            Self::TrapIfZ { test, code: _ } => {
+                let done = code.get_label();
+                let branch_at = code.cur_offset();
+                code.use_label_at_offset(branch_at, done, LabelUse::Cond7);
+                put_word(code, encode::bnz(arch_reg(*test), 0).unwrap());
+                put_word(code, encode::trap(0).unwrap());
+                code.bind_label(done, state.ctrl_plane_mut());
+            },
             Self::Mov { dst, src } => put_word(code, encode::mov(arch_reg(dst.to_reg()), arch_reg(*src))),
             Self::Add { dst, lhs, rhs } => put_word(code, encode::add(arch_reg(dst.to_reg()), arch_reg(*lhs), arch_reg(*rhs))),
             Self::Unary { op, dst, src } => {
