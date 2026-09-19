@@ -180,3 +180,14 @@
 (rule (lower (trapz value code))
       (let ((test Reg (put_in_reg value)))
         (side_effect (SideEffectNoResult.Inst (MInst.TrapIfZ test code)))))
+
+
+;;;; Checked unsigned addition ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(rule (lower (uadd_overflow $I32 x y))
+      (let ((lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y))
+            (sum WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_add sum lhs rhs)))
+            (overflow WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_cmpltu overflow (writable_reg_to_reg sum) lhs))))
+        (output_pair (writable_reg_to_reg sum) (writable_reg_to_reg overflow))))
