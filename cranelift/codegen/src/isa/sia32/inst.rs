@@ -406,10 +406,16 @@ impl MachInstEmit for Inst {
             Self::Nop => put_word(code, encode::NOP),
             Self::Trap { code: trap_code } => put_word(code, encode::trap(*trap_code).expect("backend trap code must be encodable")),
             Self::TrapIfNz { test, code: _ } => {
+                let trap = code.get_label();
                 let done = code.get_label();
-                let branch_at = code.cur_offset();
-                code.use_label_at_offset(branch_at, done, LabelUse::Cond7);
-                put_word(code, encode::bz(arch_reg(*test), 0).unwrap());
+                let cond_at = code.cur_offset();
+                code.use_label_at_offset(cond_at, trap, LabelUse::Cond7);
+                put_word(code, encode::bnz(arch_reg(*test), 0).unwrap());
+                let skip_at = code.cur_offset();
+                code.use_label_at_offset(skip_at, done, LabelUse::Branch11);
+                code.add_uncond_branch(skip_at, skip_at + 2, done);
+                put_word(code, encode::b(0).unwrap());
+                code.bind_label(trap, state.ctrl_plane_mut());
                 put_word(code, encode::trap(0).unwrap());
                 code.bind_label(done, state.ctrl_plane_mut());
             }
