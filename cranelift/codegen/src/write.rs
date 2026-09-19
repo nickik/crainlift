@@ -426,6 +426,7 @@ pub fn write_operands(w: &mut dyn Write, dfg: &DataFlowGraph, inst: Inst) -> fmt
             }
         }
         NullAry { .. } => write!(w, " "),
+        NullAryImm8 { imm, .. } => write!(w, " {imm}"),
         TernaryImm8 { imm, args, .. } => write!(w, " {}, {}, {}", args[0], args[1], imm),
         Shuffle { imm, args, .. } => {
             let data = dfg.immediates.get(imm).expect(
