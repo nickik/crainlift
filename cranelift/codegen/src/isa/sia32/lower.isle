@@ -171,3 +171,12 @@
 ;; Cranelift's generic fence therefore maps directly to that instruction.
 (rule (lower (fence))
       (side_effect (SideEffectNoResult.Inst (sia_fence))))
+
+
+;;;; Conditional traps ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(rule (lower (trapnz value code))
+      (let ((test Reg (put_in_reg value)))
+        (side_effect (SideEffectNoResult.Inst (MInst.TrapIfNz test code)))))
+(rule (lower (trapz value code))
+      (let ((test Reg (put_in_reg value)))
+        (side_effect (SideEffectNoResult.Inst (MInst.TrapIfZ test code)))))
