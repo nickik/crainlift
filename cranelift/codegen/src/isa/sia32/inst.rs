@@ -63,6 +63,16 @@ pub(crate) enum Inst {
     IndexedLoad { dst: Writable<Reg>, base: Reg, index: Reg },
     IndexedStore { src: Reg, base: Reg, index: Reg },
     Fence,
+    SRead { dst: Writable<Reg>, selector: u8 },
+    SWrite { src: Reg, selector: u8 },
+    SSwapScratch { reg: Writable<Reg> },
+    SRet,
+    SRetCtx { src: Reg },
+    TlbFence,
+    TlbFenceVa { src: Reg },
+    TlbFenceAsid { src: Reg },
+    Wfi,
+    SyncI,
 
     LoadStack { dst: Writable<Reg>, mem: StackAMode, ty: Type },
     StoreStack { src: Reg, mem: StackAMode, ty: Type },
@@ -330,7 +340,12 @@ impl MachInst for Inst {
             Self::Args { args } => for ArgPair { vreg, preg } in args { collector.reg_fixed_def(vreg, *preg); },
             Self::Rets { rets } => for RetPair { vreg, preg } in rets { collector.reg_fixed_use(vreg, *preg); },
             Self::DummyUse { reg } => collector.reg_use(reg),
-            Self::Nop | Self::Trap { .. } | Self::Fence | Self::Jump { .. } | Self::Ret => {}
+            Self::Nop | Self::Trap { .. } | Self::Fence | Self::SRet | Self::TlbFence
+            | Self::Wfi | Self::SyncI | Self::Jump { .. } | Self::Ret => {}
+            Self::SRead { dst, .. } => collector.reg_def(dst),
+            Self::SWrite { src, .. } | Self::SRetCtx { src } | Self::TlbFenceVa { src }
+            | Self::TlbFenceAsid { src } => collector.reg_use(src),
+            Self::SSwapScratch { reg } => { collector.reg_use(&mut reg.to_reg()); collector.reg_def(reg); }
             Self::TrapIfNz { test, .. } | Self::TrapIfZ { test, .. } => collector.reg_use(test),
             Self::Mov { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
             Self::Add { dst, lhs, rhs } | Self::TwoOp { dst, lhs, rhs, .. } => {
@@ -406,6 +421,16 @@ impl MachInstEmit for Inst {
         match self {
             Self::Args { .. } | Self::Rets { .. } | Self::DummyUse { .. } => {}
             Self::Nop => put_word(code, encode::NOP),
+            Self::SRead { dst, selector } => put_word(code, encode::sread(arch_reg(dst.to_reg()), *selector).expect("validated SREAD selector")),
+            Self::SWrite { src, selector } => put_word(code, encode::swrite(arch_reg(*src), *selector).expect("validated SWRITE selector")),
+            Self::SSwapScratch { reg } => put_word(code, encode::sswap_scratch(arch_reg(reg.to_reg()))),
+            Self::SRet => put_word(code, encode::sret()),
+            Self::SRetCtx { src } => put_word(code, encode::sretctx(arch_reg(*src))),
+            Self::TlbFence => put_word(code, encode::tlbfence()),
+            Self::TlbFenceVa { src } => put_word(code, encode::tlbfence_va(arch_reg(*src))),
+            Self::TlbFenceAsid { src } => put_word(code, encode::tlbfence_asid(arch_reg(*src))),
+            Self::Wfi => put_word(code, encode::wfi()),
+            Self::SyncI => put_word(code, encode::sync_i()),
             Self::Trap { code: trap_code } => put_word(code, encode::trap(*trap_code).expect("backend trap code must be encodable")),
             Self::TrapIfNz { test, code: _ } => {
                 let trap = code.get_label();
