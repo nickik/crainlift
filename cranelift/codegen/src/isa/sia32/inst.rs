@@ -259,13 +259,22 @@ fn collect_call_operands<T>(info: &mut CallInfo<T>, collector: &mut impl Operand
     for CallArgPair { vreg, preg } in &mut info.uses {
         collector.reg_fixed_use(vreg, *preg);
     }
+    // Register returns are definitions of ABI return registers, but those
+    // registers are also present in the call clobber set. regalloc2 rejects an
+    // instruction that simultaneously fixed-defs and clobbers the same preg.
+    // Remove explicit return registers from this call's clobber set before
+    // reporting the remaining clobbers.
+    let mut clobbers = info.clobbers;
     for CallRetPair { vreg, location } in &mut info.defs {
         match location {
-            RetLocation::Reg(preg, ..) => collector.reg_fixed_def(vreg, *preg),
+            RetLocation::Reg(preg, ..) => {
+                collector.reg_fixed_def(vreg, *preg);
+                clobbers.remove(*preg);
+            }
             RetLocation::Stack(..) => collector.any_def(vreg),
         }
     }
-    collector.reg_clobbers(info.clobbers);
+    collector.reg_clobbers(clobbers);
     if let Some(try_call_info) = &mut info.try_call_info {
         try_call_info.collect_operands(collector);
     }
