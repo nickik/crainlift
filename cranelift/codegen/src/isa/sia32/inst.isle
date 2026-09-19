@@ -80,6 +80,8 @@
       (offset i32)
       (ty Type))
     (Fence)
+    (TrapIfNz (test Reg) (code TrapCode))
+    (TrapIfZ (test Reg) (code TrapCode))
     (Call (info BoxCallInfo))
     (CallInd (info BoxCallIndInfo))
     (Jump
