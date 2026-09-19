@@ -226,3 +226,21 @@
             (_ Unit (emit (sia_load_const one 1))) (dst WritableReg (temp_writable_reg $I32)))
         (sia_emit_result (sia_xor dst (writable_reg_to_reg gt) (writable_reg_to_reg one)) dst)))
 (rule (lower (icmp (fits_in_32 (ty_int _)) cc x y)) (sia_icmp_result cc x y))
+
+
+;;;; Multiply / divide / remainder ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(rule (lower (imul (fits_in_32 (ty_int _)) x y))
+      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_mul dst lhs rhs) dst)))
+(rule (lower (udiv (fits_in_32 (ty_int _)) x y))
+      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_divu dst lhs rhs) dst)))
+(rule (lower (sdiv (fits_in_32 (ty_int _)) x y))
+      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_div dst lhs rhs) dst)))
+(rule (lower (urem (fits_in_32 (ty_int _)) x y))
+      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_remu dst lhs rhs) dst)))
+(rule (lower (srem (fits_in_32 (ty_int _)) x y))
+      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_rem dst lhs rhs) dst)))

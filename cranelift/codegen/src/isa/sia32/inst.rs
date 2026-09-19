@@ -29,7 +29,7 @@ use regalloc2::RegClass;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TwoOp {
     Sub, Addo, Subo, CmpEq, CmpLt, CmpLtu, Min, MinU, Max, MaxU,
-    And, Or, Xor, Shl, Shr, Sar, BSet, BClr, BInv, BExt, Rev8,
+    And, Or, Xor, Shl, Shr, Sar, BSet, BClr, BInv, BExt, Mul, Div, DivU, Rem, RemU, Rev8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -444,7 +444,7 @@ impl MachInstEmit for Inst {
                     TwoOp::Min => encode::min(d,r), TwoOp::MinU => encode::minu(d,r), TwoOp::Max => encode::max(d,r), TwoOp::MaxU => encode::maxu(d,r),
                     TwoOp::And => encode::and(d,r), TwoOp::Or => encode::or(d,r), TwoOp::Xor => encode::xor(d,r),
                     TwoOp::Shl => encode::shl(d,r), TwoOp::Shr => encode::shr(d,r), TwoOp::Sar => encode::sar(d,r),
-                    TwoOp::BSet => encode::bset(d,r), TwoOp::BClr => encode::bclr(d,r), TwoOp::BInv => encode::binv(d,r), TwoOp::BExt => encode::bext(d,r), TwoOp::Rev8 => encode::rev8(d,r),
+                    TwoOp::BSet => encode::bset(d,r), TwoOp::BClr => encode::bclr(d,r), TwoOp::BInv => encode::binv(d,r), TwoOp::BExt => encode::bext(d,r), TwoOp::Mul => encode::mul(d,r), TwoOp::Div => encode::div(d,r), TwoOp::DivU => encode::divu(d,r), TwoOp::Rem => encode::rem(d,r), TwoOp::RemU => encode::remu(d,r), TwoOp::Rev8 => encode::rev8(d,r),
                 };
                 put_word(code, word);
             }
