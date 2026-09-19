@@ -198,3 +198,11 @@ fn illegal_aliases_and_groups_are_rejected() {
     assert!(e::ldp(r(14), r(1)).is_ok());
     assert!(e::ld4(r(12), r(1)).is_ok());
 }
+
+#[test]
+fn firmware_reserved_scratch_immediate_sequence_is_architecturally_valid() {
+    use cranelift_codegen::isa::sia32::{encode, regs::Reg};
+    let r12 = Reg::new(12).unwrap();
+    assert_eq!(encode::shli(r12, 7).unwrap(), 0x5c76);
+    assert_eq!(encode::addi(r12, 8).unwrap(), 0x6e08);
+}
