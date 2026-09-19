@@ -394,7 +394,7 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
     fn sia_m_tlbfence_asid(&mut self, src: Reg) -> MInst { MInst::TlbFenceAsid { src } }
     fn sia_m_wfi(&mut self) -> MInst { MInst::Wfi {} }
     fn sia_m_sync_i(&mut self) -> MInst { MInst::SyncI {} }
-    fn sia_m_trap(&mut self, code: u8) -> MInst { MInst::Trap { code } }
+    fn sia_m_trap(&mut self, code: u8) -> MInst { MInst::SoftwareTrap { code } }
 
     fn sia_fence(&mut self) -> MInst {
         MInst::Fence
