@@ -183,6 +183,8 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             offset: *offset,
             ty: *ty,
         },
+        MInst::TrapIfNz { test, code } => MachineInst::TrapIfNz { test: *test, code: *code },
+        MInst::TrapIfZ { test, code } => MachineInst::TrapIfZ { test: *test, code: *code },
         MInst::Call { info } => MachineInst::Call { info: info.clone() },
         MInst::CallInd { info } => MachineInst::CallInd { info: info.clone() },
         MInst::Jump { target } => MachineInst::Jump { target: *target },
