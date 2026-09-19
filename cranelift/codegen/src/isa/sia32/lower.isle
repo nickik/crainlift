@@ -194,7 +194,7 @@
 
 
 ;;;; Integer comparisons ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(decl sia_icmp_result (IntCC Value Value) InstOutput)
+(decl rec sia_icmp_result (IntCC Value Value) InstOutput)
 (rule (sia_icmp_result (IntCC.Equal) x y)
       (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_cmpeq dst lhs rhs) dst)))
