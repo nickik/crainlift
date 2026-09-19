@@ -176,7 +176,7 @@
 ;;;; Conditional traps ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (rule (lower (trapnz value code))
       (let ((test Reg (put_in_reg value)))
-        (side_effect (SideEffectNoResult.Inst (MInst.TrapIfNz test code)))))
+        (emit_side_effect (SideEffectNoResult.Inst (MInst.TrapIfNz test code)))))
 (rule (lower (trapz value code))
       (let ((test Reg (put_in_reg value)))
-        (side_effect (SideEffectNoResult.Inst (MInst.TrapIfZ test code)))))
+        (emit_side_effect (SideEffectNoResult.Inst (MInst.TrapIfZ test code)))))
