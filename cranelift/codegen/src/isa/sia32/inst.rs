@@ -192,7 +192,8 @@ fn frame_stack_offset(mem: &StackAMode, frame: &FrameLayout) -> i32 {
                 + frame.clobber_size
                 + frame.fixed_frame_storage_size
                 + frame.stackslots_size
-                + frame.outgoing_args_size;
+                + frame.outgoing_args_size
+                + if frame.function_calls == FunctionCalls::Regular { 8 } else { 0 };
             i64::from(current_sp_delta) - (i64::from(stack_args_size) - offset)
         }
     };
