@@ -42,6 +42,11 @@ pub(crate) enum LoadOp { I8, U8, I16, U16, I32 }
 pub(crate) enum StoreOp { I8, I16, I32 }
 
 #[derive(Clone, Debug)]
+pub(crate) enum PrivilegedOp {
+    Trap { code: u8 }, SRead { selector: u8 }, SWrite { selector: u8 }, SSwapScratch,
+    SRet, SRetCtx, TlbFence, TlbFenceVa, TlbFenceAsid, Wfi, SyncI, Fence,
+}
+
 pub(crate) enum Inst {
     Args { args: Vec<ArgPair> },
     Rets { rets: Vec<RetPair> },
