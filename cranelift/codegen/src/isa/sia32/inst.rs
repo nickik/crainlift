@@ -43,7 +43,7 @@ pub(crate) enum StoreOp { I8, I16, I32 }
 
 #[derive(Clone, Debug)]
 pub(crate) enum PrivilegedOp {
-    Trap { code: u8 }, SRead { selector: u8 }, SWrite { selector: u8 }, SSwapScratch,
+    SoftwareTrap { code: u8 }, SRead { selector: u8 }, SWrite { selector: u8 }, SSwapScratch,
     SRet, SRetCtx, TlbFence, TlbFenceVa, TlbFenceAsid, Wfi, SyncI, Fence,
 }
 
@@ -391,7 +391,7 @@ impl MachInst for Inst {
 
     fn is_move(&self) -> Option<(Writable<Reg>, Reg)> { if let Self::Mov { dst, src } = *self { Some((dst, src)) } else { None } }
     fn is_term(&self) -> MachTerminator { match self { Self::Rets { .. } | Self::Ret => MachTerminator::Ret, Self::Jump { .. } | Self::BrNz { .. } => MachTerminator::Branch, _ => MachTerminator::None } }
-    fn is_trap(&self) -> bool { matches!(self, Self::Trap { .. }) }
+    fn is_trap(&self) -> bool { false }
     fn is_args(&self) -> bool { matches!(self, Self::Args { .. }) }
     fn call_type(&self) -> CallType { if matches!(self, Self::Call { .. } | Self::CallInd { .. }) { CallType::Regular } else { CallType::None } }
     fn is_included_in_clobbers(&self) -> bool { !self.is_args() }
@@ -406,7 +406,7 @@ impl MachInst for Inst {
     fn gen_nop_units() -> Vec<Vec<u8>> { vec![encode::NOP.to_le_bytes().to_vec()] }
     fn worst_case_size() -> CodeOffset { 24 }
     fn worst_case_island_growth() -> CodeOffset { 34 }
-    fn is_safepoint(&self) -> bool { self.is_trap() || matches!(self, Self::Call { .. } | Self::CallInd { .. }) }
+    fn is_safepoint(&self) -> bool { matches!(self, Self::SoftwareTrap { .. } | Self::Call { .. } | Self::CallInd { .. }) }
     fn function_alignment() -> FunctionAlignment { FunctionAlignment { minimum: 2, preferred: 4 } }
 }
 
