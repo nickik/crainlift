@@ -3412,7 +3412,7 @@ pub(crate) fn define(
     ig.push(Inst::new("sia_sread", "Read a SIA32-P system register selected by imm8.", &formats.nullary_imm8)
         .operands_in(&[Operand::new("selector", &imm.uimm8)])
         .operands_out(&[Operand::new("value", i32_)]).other_side_effects());
-    ig.push(Inst::new("sia_swrite", "Write a SIA32-P system register selected by imm8.", &formats.unary_imm8)
+    ig.push(Inst::new("sia_swrite", "Write a SIA32-P system register selected by imm8.", &formats.value_imm8)
         .operands_in(&[Operand::new("value", i32_), Operand::new("selector", &imm.uimm8)]).other_side_effects());
     ig.push(Inst::new("sia_sret", "Return from SIA32-P trap context.", &formats.nullary).other_side_effects());
     ig.push(Inst::new("sia_tlbfence", "Invalidate SIA32 translation state.", &formats.nullary).other_side_effects());
