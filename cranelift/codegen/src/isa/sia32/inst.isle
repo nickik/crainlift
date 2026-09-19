@@ -99,7 +99,7 @@
     (TlbFenceAsid (src Reg))
     (Wfi)
     (SyncI)
-    (Trap (code u8))
+    (SoftwareTrap (code u8))
     (TrapIfNz (test Reg) (code TrapCode))
     (TrapIfZ (test Reg) (code TrapCode))
     (Call (info BoxCallInfo))
