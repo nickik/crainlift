@@ -215,6 +215,15 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             not_taken: *not_taken,
         },
         MInst::Fence {} => MachineInst::Fence,
+        MInst::SRead { dst, selector } => MachineInst::SRead { dst: *dst, selector: *selector },
+        MInst::SWrite { src, selector } => MachineInst::SWrite { src: *src, selector: *selector },
+        MInst::SRet {} => MachineInst::SRet,
+        MInst::TlbFence {} => MachineInst::TlbFence,
+        MInst::TlbFenceVa { src } => MachineInst::TlbFenceVa { src: *src },
+        MInst::TlbFenceAsid { src } => MachineInst::TlbFenceAsid { src: *src },
+        MInst::Wfi {} => MachineInst::Wfi,
+        MInst::SyncI {} => MachineInst::SyncI,
+        MInst::Trap { code } => MachineInst::Trap { code: *code },
     }
 }
 
@@ -375,6 +384,17 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
                 .gen_call_info(sig, dest, uses, defs, try_call_info, false),
         )
     }
+
+
+    fn sia_sread(&mut self, dst: WritableReg, selector: u8) -> MInst { MInst::SRead { dst, selector } }
+    fn sia_swrite(&mut self, src: Reg, selector: u8) -> MInst { MInst::SWrite { src, selector } }
+    fn sia_sret(&mut self) -> MInst { MInst::SRet {} }
+    fn sia_tlbfence(&mut self) -> MInst { MInst::TlbFence {} }
+    fn sia_tlbfence_va(&mut self, src: Reg) -> MInst { MInst::TlbFenceVa { src } }
+    fn sia_tlbfence_asid(&mut self, src: Reg) -> MInst { MInst::TlbFenceAsid { src } }
+    fn sia_wfi(&mut self) -> MInst { MInst::Wfi {} }
+    fn sia_sync_i(&mut self) -> MInst { MInst::SyncI {} }
+    fn sia_trap(&mut self, code: u8) -> MInst { MInst::Trap { code } }
 
     fn sia_fence(&mut self) -> MInst {
         MInst::Fence
