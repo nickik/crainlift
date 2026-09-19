@@ -7,6 +7,8 @@ pub(crate) struct Formats {
     pub(crate) atomic_rmw: Rc<InstructionFormat>,
     pub(crate) binary: Rc<InstructionFormat>,
     pub(crate) binary_imm8: Rc<InstructionFormat>,
+    pub(crate) nullary_imm8: Rc<InstructionFormat>,
+    pub(crate) unary_imm8: Rc<InstructionFormat>,
     pub(crate) branch_table: Rc<InstructionFormat>,
     pub(crate) brif: Rc<InstructionFormat>,
     pub(crate) call: Rc<InstructionFormat>,
@@ -65,6 +67,8 @@ impl Formats {
             binary: Builder::new("Binary").value().value().build(),
 
             binary_imm8: Builder::new("BinaryImm8").value().imm(&imm.uimm8).build(),
+            nullary_imm8: Builder::new("NullAryImm8").imm(&imm.uimm8).build(),
+            unary_imm8: Builder::new("UnaryImm8").value().imm(&imm.uimm8).build(),
 
             // The select instructions are controlled by the second VALUE operand.
             // The first VALUE operand is the controlling flag which has a derived type.
