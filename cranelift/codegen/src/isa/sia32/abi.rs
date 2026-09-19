@@ -297,10 +297,16 @@ impl ABIMachineSpec for Sia32MachineDeps {
     fn gen_clobber_save(call_conv: isa::CallConv, _flags: &settings::Flags, frame_layout: &FrameLayout) -> SmallVec<[Inst; 16]> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         let mut out = SmallVec::new();
-        if frame_layout.clobber_size == 0 { return out; }
-        out.push(Inst::SpAdjust { amount: -(frame_layout.clobber_size as i32) });
+        let stack_size = frame_layout.clobber_size
+            + frame_layout.fixed_frame_storage_size
+            + frame_layout.outgoing_args_size;
+        if stack_size == 0 { return out; }
+        out.push(Inst::SpAdjust { amount: -(stack_size as i32) });
+        // Keep callee saves above the fixed/outgoing frame so StackAMode::Slot
+        // offsets remain based at the current SP and never address above the caller SP.
+        let save_base = frame_layout.fixed_frame_storage_size + frame_layout.outgoing_args_size;
         for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
-            out.push(Inst::StoreBaseOffset { src: Reg::from(reg.to_reg()), base: regs::stack_reg(), offset: (i as i32) * 4, ty: I32 });
+            out.push(Inst::StoreBaseOffset { src: Reg::from(reg.to_reg()), base: regs::stack_reg(), offset: (save_base as i32) + (i as i32) * 4, ty: I32 });
         }
         out
     }
@@ -308,11 +314,15 @@ impl ABIMachineSpec for Sia32MachineDeps {
     fn gen_clobber_restore(call_conv: isa::CallConv, _flags: &settings::Flags, frame_layout: &FrameLayout) -> SmallVec<[Inst; 16]> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
         let mut out = SmallVec::new();
-        if frame_layout.clobber_size == 0 { return out; }
+        let stack_size = frame_layout.clobber_size
+            + frame_layout.fixed_frame_storage_size
+            + frame_layout.outgoing_args_size;
+        if stack_size == 0 { return out; }
+        let save_base = frame_layout.fixed_frame_storage_size + frame_layout.outgoing_args_size;
         for (i, reg) in frame_layout.clobbered_callee_saves.iter().enumerate() {
-            out.push(Inst::LoadBaseOffset { dst: Writable::from_reg(Reg::from(reg.to_reg())), base: regs::stack_reg(), offset: (i as i32) * 4, ty: I32 });
+            out.push(Inst::LoadBaseOffset { dst: Writable::from_reg(Reg::from(reg.to_reg())), base: regs::stack_reg(), offset: (save_base as i32) + (i as i32) * 4, ty: I32 });
         }
-        out.push(Inst::SpAdjust { amount: frame_layout.clobber_size as i32 });
+        out.push(Inst::SpAdjust { amount: stack_size as i32 });
         out
     }
 
