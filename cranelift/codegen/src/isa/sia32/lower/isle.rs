@@ -223,7 +223,7 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
         MInst::TlbFenceAsid { src } => MachineInst::TlbFenceAsid { src: *src },
         MInst::Wfi {} => MachineInst::Wfi,
         MInst::SyncI {} => MachineInst::SyncI,
-        MInst::Trap { code } => MachineInst::Trap { code: *code },
+        MInst::SoftwareTrap { code } => MachineInst::Trap { code: *code },
     }
 }
 
