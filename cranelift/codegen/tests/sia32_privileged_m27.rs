@@ -1,3 +1,5 @@
+#![cfg(feature = "sia32")]
+
 use cranelift_codegen::isa::sia32::encode;
 use cranelift_codegen::isa::sia32::regs::Reg;
 
