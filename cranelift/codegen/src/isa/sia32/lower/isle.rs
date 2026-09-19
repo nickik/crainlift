@@ -103,6 +103,11 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             lhs: *lhs,
             rhs: *rhs,
         },
+        MInst::Mul { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::Mul, dst: *dst, lhs: *lhs, rhs: *rhs },
+        MInst::Div { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::Div, dst: *dst, lhs: *lhs, rhs: *rhs },
+        MInst::DivU { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::DivU, dst: *dst, lhs: *lhs, rhs: *rhs },
+        MInst::Rem { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::Rem, dst: *dst, lhs: *lhs, rhs: *rhs },
+        MInst::RemU { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::RemU, dst: *dst, lhs: *lhs, rhs: *rhs },
         MInst::Sub { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Sub,
             dst: *dst,
@@ -250,6 +255,12 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
     fn sia_cmpltu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
         MInst::CmpLtu { dst, lhs, rhs }
     }
+
+    fn sia_mul(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::Mul { dst, lhs, rhs } }
+    fn sia_div(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::Div { dst, lhs, rhs } }
+    fn sia_divu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::DivU { dst, lhs, rhs } }
+    fn sia_rem(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::Rem { dst, lhs, rhs } }
+    fn sia_remu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::RemU { dst, lhs, rhs } }
 
     fn sia_sub(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
         MInst::Sub { dst, lhs, rhs }
