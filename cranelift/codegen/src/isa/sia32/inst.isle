@@ -26,6 +26,10 @@
       (dst WritableReg)
       (lhs Reg)
       (rhs Reg))
+    (CmpLtu
+      (dst WritableReg)
+      (lhs Reg)
+      (rhs Reg))
     (Sub
       (dst WritableReg)
       (lhs Reg)
@@ -96,6 +100,8 @@
 (decl sia_load_const (WritableReg u64) MInst)
 (extern constructor sia_load_const sia_load_const)
 (decl sia_add (WritableReg Reg Reg) MInst)
+(decl sia_cmpltu (WritableReg Reg Reg) MInst)
+(extern constructor sia_cmpltu sia_cmpltu)
 (extern constructor sia_add sia_add)
 (decl sia_sub (WritableReg Reg Reg) MInst)
 (extern constructor sia_sub sia_sub)
