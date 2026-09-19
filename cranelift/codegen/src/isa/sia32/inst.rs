@@ -71,6 +71,8 @@ pub(crate) enum Inst {
     Fence,
     SRead { dst: Writable<Reg>, selector: u8 },
     SWrite { src: Reg, selector: u8 },
+    ReadFixedGpr { dst: Writable<Reg>, index: u8 },
+    WriteFixedGpr { src: Reg, index: u8 },
     SSwapScratch { dst: Writable<Reg>, src: Reg },
     SRet,
     SRetCtx { src: Reg },
@@ -358,6 +360,8 @@ impl MachInst for Inst {
             Self::Nop | Self::SoftwareTrap { .. } | Self::Fence | Self::SRet | Self::TlbFence
             | Self::Wfi | Self::SyncI | Self::Jump { .. } | Self::Ret => {}
             Self::SRead { dst, .. } => collector.reg_def(dst),
+            Self::ReadFixedGpr { dst, index } => collector.reg_fixed_def(dst, regs::preg(*index)),
+            Self::WriteFixedGpr { src, index } => collector.reg_fixed_use(src, regs::preg(*index)),
             Self::SWrite { src, .. } | Self::SRetCtx { src } | Self::TlbFenceVa { src }
             | Self::TlbFenceAsid { src } => collector.reg_use(src),
             Self::SSwapScratch { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
@@ -438,6 +442,7 @@ impl MachInstEmit for Inst {
             Self::Nop => put_word(code, encode::NOP),
             Self::SRead { dst, selector } => put_word(code, encode::sread(arch_reg(dst.to_reg()), *selector).expect("validated SREAD selector")),
             Self::SWrite { src, selector } => put_word(code, encode::swrite(arch_reg(*src), *selector).expect("validated SWRITE selector")),
+            Self::ReadFixedGpr { .. } | Self::WriteFixedGpr { .. } => {},
             Self::SSwapScratch { dst, src } => { let dst = arch_reg(dst.to_reg()); let src = arch_reg(*src); if dst != src { put_word(code, encode::mov(dst, src)); } put_word(code, encode::sswap_scratch(dst)); },
             Self::SRet => put_word(code, encode::sret()),
             Self::SRetCtx { src } => put_word(code, encode::sretctx(arch_reg(*src))),
