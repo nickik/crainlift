@@ -47,6 +47,7 @@ pub(crate) enum PrivilegedOp {
     SRet, SRetCtx, TlbFence, TlbFenceVa, TlbFenceAsid, Wfi, SyncI, Fence,
 }
 
+#[derive(Clone, Debug)]
 pub(crate) enum Inst {
     Args { args: Vec<ArgPair> },
     Rets { rets: Vec<RetPair> },
