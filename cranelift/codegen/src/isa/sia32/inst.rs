@@ -269,7 +269,7 @@ fn collect_call_operands<T>(info: &mut CallInfo<T>, collector: &mut impl Operand
         match location {
             RetLocation::Reg(preg, ..) => {
                 collector.reg_fixed_def(vreg, *preg);
-                clobbers.remove(*preg);
+                clobbers.remove(preg.to_real_reg().expect("SIA32 ABI return register must be physical").into());
             }
             RetLocation::Stack(..) => collector.any_def(vreg),
         }
