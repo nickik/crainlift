@@ -407,7 +407,7 @@ impl MachInst for Inst {
     fn worst_case_size() -> CodeOffset { 24 }
     fn worst_case_island_growth() -> CodeOffset { 34 }
     fn is_safepoint(&self) -> bool { matches!(self, Self::SoftwareTrap { .. } | Self::Call { .. } | Self::CallInd { .. }) }
-    fn function_alignment() -> FunctionAlignment { FunctionAlignment { minimum: 2, preferred: 4 } }
+    fn function_alignment() -> FunctionAlignment { FunctionAlignment { minimum: 4, preferred: 4 } }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -593,6 +593,13 @@ mod tests {
     #[test]
     fn literal_pool_threshold_keeps_small_values_inline(){
         assert!(const_digits(63).len() <= 2); assert!(const_digits(128).len() <= 2); assert!(const_digits(0xdead_beef).len() > 2);
+    }
+    #[test]
+    #[test]
+    fn function_alignment_preserves_ldpc_word_phase(){
+        let a=Inst::function_alignment();
+        assert_eq!(a.minimum,4);
+        assert_eq!(a.preferred,4);
     }
     #[test]
     fn indirect_call_is_a_real_regular_call(){
