@@ -92,6 +92,8 @@
       (ty Type))
     (Fence)
     (SRead (dst WritableReg) (selector u8))
+    (ReadFixedGpr (dst WritableReg) (index u8))
+    (WriteFixedGpr (src Reg) (index u8))
     (SWrite (src Reg) (selector u8))
     (SRet)
     (TlbFence)
