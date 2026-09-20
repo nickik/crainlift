@@ -217,13 +217,13 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
         },
         MInst::Fence {} => MachineInst::Fence,
         MInst::SRead { dst, selector } => MachineInst::SRead { dst: *dst, selector: *selector },
-        MInst::ReadFixedGpr { dst, index } => MachineInst::Mov {
+        MInst::ReadFixedGpr { dst, index } => MachineInst::ReadFixedGpr {
             dst: *dst,
-            src: regs::mach_reg(*index),
+            index: *index,
         },
-        MInst::WriteFixedGpr { src, index } => MachineInst::Mov {
-            dst: WritableReg::from_reg(regs::mach_reg(*index)),
+        MInst::WriteFixedGpr { src, index } => MachineInst::WriteFixedGpr {
             src: *src,
+            index: *index,
         },
         MInst::SWrite { src, selector } => MachineInst::SWrite { src: *src, selector: *selector },
         MInst::SRet {} => MachineInst::SRet,
