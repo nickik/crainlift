@@ -360,8 +360,8 @@ impl MachInst for Inst {
             Self::Nop | Self::SoftwareTrap { .. } | Self::Fence | Self::SRet | Self::TlbFence
             | Self::Wfi | Self::SyncI | Self::Jump { .. } | Self::Ret => {}
             Self::SRead { dst, .. } => collector.reg_def(dst),
-            Self::ReadFixedGpr { dst, index } => collector.reg_fixed_def(dst, regs::preg(*index).into()),
-            Self::WriteFixedGpr { src, index } => collector.reg_fixed_use(src, regs::preg(*index).into()),
+            Self::ReadFixedGpr { dst, .. } => collector.reg_def(dst),
+            Self::WriteFixedGpr { src, .. } => collector.reg_use(src),
             Self::SWrite { src, .. } | Self::SRetCtx { src } | Self::TlbFenceVa { src }
             | Self::TlbFenceAsid { src } => collector.reg_use(src),
             Self::SSwapScratch { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
