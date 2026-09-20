@@ -217,6 +217,14 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
         },
         MInst::Fence {} => MachineInst::Fence,
         MInst::SRead { dst, selector } => MachineInst::SRead { dst: *dst, selector: *selector },
+        MInst::ReadFixedGpr { dst, index } => MachineInst::Mov {
+            dst: *dst,
+            src: regs::mach_reg(*index),
+        },
+        MInst::WriteFixedGpr { src, index } => MachineInst::Mov {
+            dst: WritableReg::from_reg(regs::mach_reg(*index)),
+            src: *src,
+        },
         MInst::SWrite { src, selector } => MachineInst::SWrite { src: *src, selector: *selector },
         MInst::SRet {} => MachineInst::SRet,
         MInst::TlbFence {} => MachineInst::TlbFence,
@@ -389,11 +397,11 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn sia_m_gpr_read(&mut self, dst: WritableReg, register: u8) -> MInst {
         assert!(matches!(register, 1..=11 | 15), "fixed GPR read must name an ABI GPR");
-        MInst::Mov { dst, src: regs::mach_reg(register) }
+        MInst::ReadFixedGpr { dst, index: register }
     }
     fn sia_m_gpr_write(&mut self, src: Reg, register: u8) -> MInst {
         assert!(matches!(register, 1..=11 | 15), "fixed GPR write must name an ABI GPR");
-        MInst::Mov { dst: WritableReg::from_reg(regs::mach_reg(register)), src }
+        MInst::WriteFixedGpr { src, index: register }
     }
     fn sia_m_sread(&mut self, dst: WritableReg, selector: u8) -> MInst { MInst::SRead { dst, selector } }
     fn sia_m_swrite(&mut self, src: Reg, selector: u8) -> MInst { MInst::SWrite { src, selector } }
