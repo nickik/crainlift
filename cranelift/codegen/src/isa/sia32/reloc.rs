@@ -43,12 +43,12 @@ pub(crate) fn checked_abs32_value(symbol_address: u64, addend: i32) -> Option<u3
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::inst::EmitState;
+    use super::*;
+    use crate::RelocTarget;
     use crate::ir::ExternalName;
     use crate::isa::CallConv;
     use crate::machinst::{CallInfo, MachInstEmit};
-    use crate::RelocTarget;
     use alloc::boxed::Box;
 
     #[test]
@@ -78,7 +78,9 @@ mod tests {
     fn direct_external_call_uses_abs32_target_literal() {
         let target = ExternalName::testcase("sia_callee");
         let info = CallInfo::empty(target.clone(), CallConv::SystemV);
-        let call = Inst::Call { info: Box::new(info) };
+        let call = Inst::Call {
+            info: Box::new(info),
+        };
         let mut code = MachBuffer::<Inst>::new();
         let mut state = EmitState::default();
 

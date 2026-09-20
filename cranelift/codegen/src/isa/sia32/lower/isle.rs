@@ -4,19 +4,17 @@ pub mod generated_code;
 
 use self::generated_code::MInst;
 use crate::ir::condcodes::{FloatCC, IntCC};
+use crate::ir::{
+    BlockCall, Inst, InstructionData, MemFlagsData, Opcode, TrapCode, Type, Value, ValueList,
+    immediates::*, types::*,
+};
 use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
 use crate::isa::sia32::regs;
 use crate::machinst::isle::*;
 use crate::machinst::{
-    CallArgList, CallRetList, CallInfo, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
-    VCodeConstantData, VCodeInst,
-};
-use crate::{
-    ir::{
-        BlockCall, Inst, InstructionData, MemFlagsData, Opcode, TrapCode, Type, Value, ValueList,
-        immediates::*, types::*,
-    },
+    CallArgList, CallInfo, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode,
+    VCodeConstant, VCodeConstantData, VCodeInst,
 };
 use alloc::boxed::Box;
 type BoxCallInfo = Box<CallInfo<ExternalName>>;
@@ -68,7 +66,9 @@ impl From<MachineInst> for MInst {
         match inst {
             MachineInst::Mov { dst, src } => Self::Mov { dst, src },
             MachineInst::StackAddr { dst, mem } => Self::StackAddr { dst, mem },
-            other => panic!("SIA ISLE wrapper cannot represent shared-prelude instruction {other:?}"),
+            other => {
+                panic!("SIA ISLE wrapper cannot represent shared-prelude instruction {other:?}")
+            }
         }
     }
 }
@@ -93,10 +93,16 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             rhs: *rhs,
         },
         MInst::CmpEq { dst, lhs, rhs } => MachineInst::TwoOp {
-            op: TwoOp::CmpEq, dst: *dst, lhs: *lhs, rhs: *rhs,
+            op: TwoOp::CmpEq,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::CmpLt { dst, lhs, rhs } => MachineInst::TwoOp {
-            op: TwoOp::CmpLt, dst: *dst, lhs: *lhs, rhs: *rhs,
+            op: TwoOp::CmpLt,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
         },
         MInst::CmpLtu { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::CmpLtu,
@@ -104,11 +110,36 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             lhs: *lhs,
             rhs: *rhs,
         },
-        MInst::Mul { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::Mul, dst: *dst, lhs: *lhs, rhs: *rhs },
-        MInst::Div { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::Div, dst: *dst, lhs: *lhs, rhs: *rhs },
-        MInst::DivU { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::DivU, dst: *dst, lhs: *lhs, rhs: *rhs },
-        MInst::Rem { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::Rem, dst: *dst, lhs: *lhs, rhs: *rhs },
-        MInst::RemU { dst, lhs, rhs } => MachineInst::TwoOp { op: TwoOp::RemU, dst: *dst, lhs: *lhs, rhs: *rhs },
+        MInst::Mul { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Mul,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Div { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Div,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::DivU { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::DivU,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::Rem { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::Rem,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::RemU { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::RemU,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
         MInst::Sub { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Sub,
             dst: *dst,
@@ -201,8 +232,14 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             offset: *offset,
             ty: *ty,
         },
-        MInst::TrapIfNz { test, code } => MachineInst::TrapIfNz { test: *test, code: *code },
-        MInst::TrapIfZ { test, code } => MachineInst::TrapIfZ { test: *test, code: *code },
+        MInst::TrapIfNz { test, code } => MachineInst::TrapIfNz {
+            test: *test,
+            code: *code,
+        },
+        MInst::TrapIfZ { test, code } => MachineInst::TrapIfZ {
+            test: *test,
+            code: *code,
+        },
         MInst::Call { info } => MachineInst::Call { info: info.clone() },
         MInst::CallInd { info } => MachineInst::CallInd { info: info.clone() },
         MInst::Jump { target } => MachineInst::Jump { target: *target },
@@ -216,7 +253,10 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             not_taken: *not_taken,
         },
         MInst::Fence {} => MachineInst::Fence,
-        MInst::SRead { dst, selector } => MachineInst::SRead { dst: *dst, selector: *selector },
+        MInst::SRead { dst, selector } => MachineInst::SRead {
+            dst: *dst,
+            selector: *selector,
+        },
         MInst::ReadFixedGpr { dst, index } => MachineInst::ReadFixedGpr {
             dst: *dst,
             index: *index,
@@ -225,7 +265,10 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             src: *src,
             index: *index,
         },
-        MInst::SWrite { src, selector } => MachineInst::SWrite { src: *src, selector: *selector },
+        MInst::SWrite { src, selector } => MachineInst::SWrite {
+            src: *src,
+            selector: *selector,
+        },
         MInst::SRet {} => MachineInst::SRet,
         MInst::TlbFence {} => MachineInst::TlbFence,
         MInst::TlbFenceVa { src } => MachineInst::TlbFenceVa { src: *src },
@@ -245,10 +288,10 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn gen_stack_addr(&mut self, slot: StackSlot, offset: Offset32) -> Reg {
         let result = self.temp_writable_reg(I32);
-        let inst = self
-            .lower_ctx
-            .abi()
-            .sized_stackslot_addr(slot, i64::from(offset) as u32, result);
+        let inst =
+            self.lower_ctx
+                .abi()
+                .sized_stackslot_addr(slot, i64::from(offset) as u32, result);
         self.lower_ctx.emit(inst);
         result.to_reg()
     }
@@ -274,11 +317,21 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         MInst::CmpLtu { dst, lhs, rhs }
     }
 
-    fn sia_mul(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::Mul { dst, lhs, rhs } }
-    fn sia_div(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::Div { dst, lhs, rhs } }
-    fn sia_divu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::DivU { dst, lhs, rhs } }
-    fn sia_rem(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::Rem { dst, lhs, rhs } }
-    fn sia_remu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst { MInst::RemU { dst, lhs, rhs } }
+    fn sia_mul(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::Mul { dst, lhs, rhs }
+    }
+    fn sia_div(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::Div { dst, lhs, rhs }
+    }
+    fn sia_divu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::DivU { dst, lhs, rhs }
+    }
+    fn sia_rem(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::Rem { dst, lhs, rhs }
+    }
+    fn sia_remu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::RemU { dst, lhs, rhs }
+    }
 
     fn sia_sub(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
         MInst::Sub { dst, lhs, rhs }
@@ -394,27 +447,53 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         )
     }
 
-
     fn sia_m_gpr_read(&mut self, dst: WritableReg, register: u8) -> MInst {
-        assert!(matches!(register, 1..=11 | 15), "fixed GPR read must name an ABI GPR");
-        MInst::ReadFixedGpr { dst, index: register }
+        assert!(
+            matches!(register, 1..=11 | 15),
+            "fixed GPR read must name an ABI GPR"
+        );
+        MInst::ReadFixedGpr {
+            dst,
+            index: register,
+        }
     }
     fn sia_m_gpr_write(&mut self, src: Reg, register: u8) -> MInst {
         assert!(
             matches!(register, 1..=11 | 13 | 15),
             "fixed GPR write must name an ABI GPR or architectural SP"
         );
-        MInst::WriteFixedGpr { src, index: register }
+        MInst::WriteFixedGpr {
+            src,
+            index: register,
+        }
     }
-    fn sia_m_sread(&mut self, dst: WritableReg, selector: u8) -> MInst { MInst::SRead { dst, selector } }
-    fn sia_m_swrite(&mut self, src: Reg, selector: u8) -> MInst { MInst::SWrite { src, selector } }
-    fn sia_m_sret(&mut self) -> MInst { MInst::SRet {} }
-    fn sia_m_tlbfence(&mut self) -> MInst { MInst::TlbFence {} }
-    fn sia_m_tlbfence_va(&mut self, src: Reg) -> MInst { MInst::TlbFenceVa { src } }
-    fn sia_m_tlbfence_asid(&mut self, src: Reg) -> MInst { MInst::TlbFenceAsid { src } }
-    fn sia_m_wfi(&mut self) -> MInst { MInst::Wfi {} }
-    fn sia_m_sync_i(&mut self) -> MInst { MInst::SyncI {} }
-    fn sia_m_trap(&mut self, code: u8) -> MInst { MInst::SoftwareTrap { code } }
+    fn sia_m_sread(&mut self, dst: WritableReg, selector: u8) -> MInst {
+        MInst::SRead { dst, selector }
+    }
+    fn sia_m_swrite(&mut self, src: Reg, selector: u8) -> MInst {
+        MInst::SWrite { src, selector }
+    }
+    fn sia_m_sret(&mut self) -> MInst {
+        MInst::SRet {}
+    }
+    fn sia_m_tlbfence(&mut self) -> MInst {
+        MInst::TlbFence {}
+    }
+    fn sia_m_tlbfence_va(&mut self, src: Reg) -> MInst {
+        MInst::TlbFenceVa { src }
+    }
+    fn sia_m_tlbfence_asid(&mut self, src: Reg) -> MInst {
+        MInst::TlbFenceAsid { src }
+    }
+    fn sia_m_wfi(&mut self) -> MInst {
+        MInst::Wfi {}
+    }
+    fn sia_m_sync_i(&mut self) -> MInst {
+        MInst::SyncI {}
+    }
+    fn sia_m_trap(&mut self, code: u8) -> MInst {
+        MInst::SoftwareTrap { code }
+    }
 
     fn sia_fence(&mut self) -> MInst {
         MInst::Fence

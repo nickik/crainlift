@@ -199,7 +199,12 @@ mod tests {
     #[test]
     fn i64_uses_aligned_register_pairs() {
         let p = place_args(
-            &[ValueKind::I32, ValueKind::I64, ValueKind::I32, ValueKind::I64],
+            &[
+                ValueKind::I32,
+                ValueKind::I64,
+                ValueKind::I32,
+                ValueKind::I64,
+            ],
             false,
         );
         assert_eq!(p.values[0], Location::Reg(1));

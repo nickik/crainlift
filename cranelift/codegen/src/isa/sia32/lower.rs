@@ -14,9 +14,16 @@ impl LowerBackend for Sia32Backend {
         isle::lower(ctx, self, ir_inst)
     }
 
-    fn lower_branch(&self, ctx: &mut Lower<Inst>, ir_inst: IRInst, targets: &[MachLabel]) -> Option<()> {
+    fn lower_branch(
+        &self,
+        ctx: &mut Lower<Inst>,
+        ir_inst: IRInst,
+        targets: &[MachLabel],
+    ) -> Option<()> {
         isle::lower_branch(ctx, self, ir_inst, targets)
     }
 
-    fn maybe_pinned_reg(&self) -> Option<Reg> { None }
+    fn maybe_pinned_reg(&self) -> Option<Reg> {
+        None
+    }
 }

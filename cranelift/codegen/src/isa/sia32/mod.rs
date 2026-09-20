@@ -11,8 +11,8 @@ use crate::isa::{
 };
 use crate::machinst::CompiledCode;
 use crate::machinst::{
-    CompiledCodeStencil, MachInst, MachTextSectionBuilder, Reg, SigSet, TextSectionBuilder,
-    VCode, compile,
+    CompiledCodeStencil, MachInst, MachTextSectionBuilder, Reg, SigSet, TextSectionBuilder, VCode,
+    compile,
 };
 use crate::result::CodegenResult;
 use crate::settings::{self as shared_settings, Flags};
@@ -26,18 +26,18 @@ use target_lexicon::{Architecture, Triple};
 
 mod abi;
 mod abi_contract;
+#[allow(missing_docs)]
+pub mod encode;
 mod i64_prep;
 mod inst;
 mod inst_abi_compat;
 mod label;
 mod lower;
-mod reloc;
-#[allow(missing_docs)]
-pub mod encode;
 #[allow(missing_docs)]
 pub mod m7;
 #[allow(missing_docs)]
 pub mod regs;
+mod reloc;
 mod settings;
 
 /// Native SIA32 target backend. Consumers obtain it through `isa_builder` as a
@@ -56,7 +56,11 @@ impl Sia32Backend {
         flags: shared_settings::Flags,
         isa_flags: settings::Flags,
     ) -> Self {
-        Self { triple, flags, isa_flags }
+        Self {
+            triple,
+            flags,
+            isa_flags,
+        }
     }
 
     /// Lower, allocate, and finalize a function using the normal MachInst
@@ -109,12 +113,24 @@ impl TargetIsa for Sia32Backend {
         }))
     }
 
-    fn name(&self) -> &'static str { "sia32" }
-    fn dynamic_vector_bytes(&self, _dynamic_ty: ir::Type) -> u32 { 0 }
-    fn triple(&self) -> &Triple { &self.triple }
-    fn flags(&self) -> &shared_settings::Flags { &self.flags }
-    fn isa_flags(&self) -> Vec<shared_settings::Value> { self.isa_flags.iter().collect() }
-    fn isa_flags_hash_key(&self) -> IsaFlagsHashKey<'_> { IsaFlagsHashKey(self.isa_flags.hash_key()) }
+    fn name(&self) -> &'static str {
+        "sia32"
+    }
+    fn dynamic_vector_bytes(&self, _dynamic_ty: ir::Type) -> u32 {
+        0
+    }
+    fn triple(&self) -> &Triple {
+        &self.triple
+    }
+    fn flags(&self) -> &shared_settings::Flags {
+        &self.flags
+    }
+    fn isa_flags(&self) -> Vec<shared_settings::Value> {
+        self.isa_flags.iter().collect()
+    }
+    fn isa_flags_hash_key(&self) -> IsaFlagsHashKey<'_> {
+        IsaFlagsHashKey(self.isa_flags.hash_key())
+    }
 
     #[cfg(feature = "unwind")]
     fn emit_unwind_info(
@@ -133,7 +149,9 @@ impl TargetIsa for Sia32Backend {
         inst::Inst::function_alignment()
     }
 
-    fn page_size_align_log2(&self) -> u8 { 11 }
+    fn page_size_align_log2(&self) -> u8 {
+        11
+    }
 
     fn pretty_print_reg(&self, reg: Reg, _size: u8) -> String {
         match reg.to_real_reg() {
@@ -147,12 +165,24 @@ impl TargetIsa for Sia32Backend {
         }
     }
 
-    fn has_native_fma(&self) -> bool { false }
-    fn has_round(&self) -> bool { false }
-    fn has_blendv_lowering(&self, _ty: Type) -> bool { false }
-    fn has_x86_pshufb_lowering(&self) -> bool { false }
-    fn has_x86_pmulhrsw_lowering(&self) -> bool { false }
-    fn has_x86_pmaddubsw_lowering(&self) -> bool { false }
+    fn has_native_fma(&self) -> bool {
+        false
+    }
+    fn has_round(&self) -> bool {
+        false
+    }
+    fn has_blendv_lowering(&self, _ty: Type) -> bool {
+        false
+    }
+    fn has_x86_pshufb_lowering(&self) -> bool {
+        false
+    }
+    fn has_x86_pmulhrsw_lowering(&self) -> bool {
+        false
+    }
+    fn has_x86_pmaddubsw_lowering(&self) -> bool {
+        false
+    }
 
     fn default_argument_extension(&self) -> ir::ArgumentExtension {
         ir::ArgumentExtension::None
@@ -175,7 +205,11 @@ pub fn isa_builder(triple: Triple) -> IsaBuilder {
         Architecture::Sia32 => {}
         _ => unreachable!(),
     }
-    IsaBuilder { triple, setup: settings::builder(), constructor: isa_constructor }
+    IsaBuilder {
+        triple,
+        setup: settings::builder(),
+        constructor: isa_constructor,
+    }
 }
 
 fn isa_constructor(

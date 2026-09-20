@@ -1,10 +1,13 @@
 #![cfg(feature = "sia32")]
 
 use cranelift_codegen::Context;
-use cranelift_codegen::ir::{Function, InstBuilder, MemFlagsData, Signature, Type, UserFuncName, Value, types::{I8, I16, I32, I64}};
+use cranelift_codegen::cursor::{Cursor, FuncCursor};
+use cranelift_codegen::ir::{
+    Function, InstBuilder, MemFlagsData, Signature, Type, UserFuncName, Value,
+    types::{I8, I16, I32, I64},
+};
 use cranelift_codegen::isa::{self, CallConv};
 use cranelift_codegen::settings;
-use cranelift_codegen::cursor::{Cursor, FuncCursor};
 use cranelift_control::ControlPlane;
 use target_lexicon::Triple;
 
@@ -43,7 +46,8 @@ fn compile_expression(
     build: impl FnOnce(&mut FuncCursor<'_>) -> Value,
 ) -> Result<Vec<u8>, String> {
     let mut sig = Signature::new(CallConv::SystemV);
-    sig.returns.push(cranelift_codegen::ir::AbiParam::new(return_ty));
+    sig.returns
+        .push(cranelift_codegen::ir::AbiParam::new(return_ty));
     let mut func = Function::with_name_signature(UserFuncName::testcase("expr"), sig);
     let block = func.dfg.make_block();
     func.layout.append_block(block);
@@ -56,7 +60,9 @@ fn compile_expression(
     compile_function(func)
 }
 
-fn compile_i32_expression(build: impl FnOnce(&mut FuncCursor<'_>) -> Value) -> Result<Vec<u8>, String> {
+fn compile_i32_expression(
+    build: impl FnOnce(&mut FuncCursor<'_>) -> Value,
+) -> Result<Vec<u8>, String> {
     compile_expression(I32, build)
 }
 
@@ -77,63 +83,141 @@ fn integer_constants_use_production_sia32_lowering() {
         });
         assert!(!code.is_empty());
         assert_eq!(code.len() % 2, 0);
-        assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0], "{ty} must emit SIA32 ret");
+        assert_eq!(
+            &code[code.len() - 2..],
+            &[0xe0, 0xc0],
+            "{ty} must emit SIA32 ret"
+        );
     }
 }
 
 #[test]
 fn i64_constant_remains_rejected_by_sia32_m5() {
     let error = compile_iconst(I64, 1).expect_err("SIA32 M5 must not accept I64 lowering");
-    assert!(error.contains("implemented in ISLE"), "unexpected I64 failure: {error}");
+    assert!(
+        error.contains("implemented in ISLE"),
+        "unexpected I64 failure: {error}"
+    );
 }
 
 #[test]
 fn integer_alu_compiles_through_production_sia32_pipeline() {
     let cases: &[(&str, fn(&mut FuncCursor<'_>) -> Value)] = &[
-        ("iadd", |pos| { let a = pos.ins().iconst(I32, 19); let b = pos.ins().iconst(I32, 23); pos.ins().iadd(a, b) }),
-        ("isub", |pos| { let a = pos.ins().iconst(I32, 19); let b = pos.ins().iconst(I32, 23); pos.ins().isub(a, b) }),
-        ("band", |pos| { let a = pos.ins().iconst(I32, 0x55aa); let b = pos.ins().iconst(I32, 0x0f0f); pos.ins().band(a, b) }),
-        ("bor", |pos| { let a = pos.ins().iconst(I32, 0x55aa); let b = pos.ins().iconst(I32, 0x0f0f); pos.ins().bor(a, b) }),
-        ("bxor", |pos| { let a = pos.ins().iconst(I32, 0x55aa); let b = pos.ins().iconst(I32, 0x0f0f); pos.ins().bxor(a, b) }),
+        ("iadd", |pos| {
+            let a = pos.ins().iconst(I32, 19);
+            let b = pos.ins().iconst(I32, 23);
+            pos.ins().iadd(a, b)
+        }),
+        ("isub", |pos| {
+            let a = pos.ins().iconst(I32, 19);
+            let b = pos.ins().iconst(I32, 23);
+            pos.ins().isub(a, b)
+        }),
+        ("band", |pos| {
+            let a = pos.ins().iconst(I32, 0x55aa);
+            let b = pos.ins().iconst(I32, 0x0f0f);
+            pos.ins().band(a, b)
+        }),
+        ("bor", |pos| {
+            let a = pos.ins().iconst(I32, 0x55aa);
+            let b = pos.ins().iconst(I32, 0x0f0f);
+            pos.ins().bor(a, b)
+        }),
+        ("bxor", |pos| {
+            let a = pos.ins().iconst(I32, 0x55aa);
+            let b = pos.ins().iconst(I32, 0x0f0f);
+            pos.ins().bxor(a, b)
+        }),
     ];
     for (name, build) in cases {
         let code = compile_i32_expression(*build)
             .unwrap_or_else(|error| panic!("{name} failed in production SIA32 pipeline: {error}"));
-        assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0], "{name} must emit SIA32 ret");
+        assert_eq!(
+            &code[code.len() - 2..],
+            &[0xe0, 0xc0],
+            "{name} must emit SIA32 ret"
+        );
     }
 }
 
 #[test]
 fn shifts_and_unary_ops_compile_through_production_sia32_pipeline() {
     let cases: &[(&str, fn(&mut FuncCursor<'_>) -> Value)] = &[
-        ("ishl.i32", |pos| { let a = pos.ins().iconst(I32, 3); let b = pos.ins().iconst(I32, 4); pos.ins().ishl(a, b) }),
-        ("ushr.i32", |pos| { let a = pos.ins().iconst(I32, -16); let b = pos.ins().iconst(I32, 2); pos.ins().ushr(a, b) }),
-        ("sshr.i32", |pos| { let a = pos.ins().iconst(I32, -16); let b = pos.ins().iconst(I32, 2); pos.ins().sshr(a, b) }),
-        ("clz.i32", |pos| { let a = pos.ins().iconst(I32, 0x100); pos.ins().clz(a) }),
-        ("ctz.i32", |pos| { let a = pos.ins().iconst(I32, 0x100); pos.ins().ctz(a) }),
-        ("popcnt.i32", |pos| { let a = pos.ins().iconst(I32, 0x55aa); pos.ins().popcnt(a) }),
+        ("ishl.i32", |pos| {
+            let a = pos.ins().iconst(I32, 3);
+            let b = pos.ins().iconst(I32, 4);
+            pos.ins().ishl(a, b)
+        }),
+        ("ushr.i32", |pos| {
+            let a = pos.ins().iconst(I32, -16);
+            let b = pos.ins().iconst(I32, 2);
+            pos.ins().ushr(a, b)
+        }),
+        ("sshr.i32", |pos| {
+            let a = pos.ins().iconst(I32, -16);
+            let b = pos.ins().iconst(I32, 2);
+            pos.ins().sshr(a, b)
+        }),
+        ("clz.i32", |pos| {
+            let a = pos.ins().iconst(I32, 0x100);
+            pos.ins().clz(a)
+        }),
+        ("ctz.i32", |pos| {
+            let a = pos.ins().iconst(I32, 0x100);
+            pos.ins().ctz(a)
+        }),
+        ("popcnt.i32", |pos| {
+            let a = pos.ins().iconst(I32, 0x55aa);
+            pos.ins().popcnt(a)
+        }),
     ];
     for (name, build) in cases {
         let code = compile_i32_expression(*build)
             .unwrap_or_else(|error| panic!("{name} failed in production SIA32 pipeline: {error}"));
-        assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0], "{name} must emit SIA32 ret");
+        assert_eq!(
+            &code[code.len() - 2..],
+            &[0xe0, 0xc0],
+            "{name} must emit SIA32 ret"
+        );
     }
 }
 
 #[test]
 fn narrow_integer_conversions_compile_through_production_sia32_pipeline() {
     let cases: &[(&str, Type, fn(&mut FuncCursor<'_>) -> Value)] = &[
-        ("uextend.i8", I32, |pos| { let v = pos.ins().iconst(I8, -1); pos.ins().uextend(I32, v) }),
-        ("uextend.i16", I32, |pos| { let v = pos.ins().iconst(I16, -1); pos.ins().uextend(I32, v) }),
-        ("sextend.i8", I32, |pos| { let v = pos.ins().iconst(I8, -1); pos.ins().sextend(I32, v) }),
-        ("sextend.i16", I32, |pos| { let v = pos.ins().iconst(I16, -1); pos.ins().sextend(I32, v) }),
-        ("ireduce.i8", I8, |pos| { let v = pos.ins().iconst(I32, 0x1234); pos.ins().ireduce(I8, v) }),
-        ("ireduce.i16", I16, |pos| { let v = pos.ins().iconst(I32, 0x1234_5678); pos.ins().ireduce(I16, v) }),
+        ("uextend.i8", I32, |pos| {
+            let v = pos.ins().iconst(I8, -1);
+            pos.ins().uextend(I32, v)
+        }),
+        ("uextend.i16", I32, |pos| {
+            let v = pos.ins().iconst(I16, -1);
+            pos.ins().uextend(I32, v)
+        }),
+        ("sextend.i8", I32, |pos| {
+            let v = pos.ins().iconst(I8, -1);
+            pos.ins().sextend(I32, v)
+        }),
+        ("sextend.i16", I32, |pos| {
+            let v = pos.ins().iconst(I16, -1);
+            pos.ins().sextend(I32, v)
+        }),
+        ("ireduce.i8", I8, |pos| {
+            let v = pos.ins().iconst(I32, 0x1234);
+            pos.ins().ireduce(I8, v)
+        }),
+        ("ireduce.i16", I16, |pos| {
+            let v = pos.ins().iconst(I32, 0x1234_5678);
+            pos.ins().ireduce(I16, v)
+        }),
     ];
     for (name, return_ty, build) in cases {
         let code = compile_expression(*return_ty, *build)
             .unwrap_or_else(|error| panic!("{name} failed in production SIA32 pipeline: {error}"));
-        assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0], "{name} must emit SIA32 ret");
+        assert_eq!(
+            &code[code.len() - 2..],
+            &[0xe0, 0xc0],
+            "{name} must emit SIA32 ret"
+        );
     }
 }
 
@@ -153,8 +237,9 @@ fn scalar_memory_ops_compile_through_production_sia32_pipeline() {
             let value = pos.ins().load(ty, MemFlagsData::new(), ptr, 4);
             pos.ins().return_(&[value]);
         }
-        let code = compile_function(func)
-            .unwrap_or_else(|error| panic!("load {ty} failed in production SIA32 pipeline: {error}"));
+        let code = compile_function(func).unwrap_or_else(|error| {
+            panic!("load {ty} failed in production SIA32 pipeline: {error}")
+        });
         assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
     }
 
@@ -173,8 +258,9 @@ fn scalar_memory_ops_compile_through_production_sia32_pipeline() {
             pos.ins().store(MemFlagsData::new(), value, ptr, 8);
             pos.ins().return_(&[value]);
         }
-        let code = compile_function(func)
-            .unwrap_or_else(|error| panic!("store {ty} failed in production SIA32 pipeline: {error}"));
+        let code = compile_function(func).unwrap_or_else(|error| {
+            panic!("store {ty} failed in production SIA32 pipeline: {error}")
+        });
         assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
     }
 }
@@ -219,7 +305,10 @@ fn basic_control_flow_compiles_through_production_sia32_pipeline() {
         pos.ins().return_(&[no]);
     }
     let branch_code = compile_function(branch_func).expect("production SIA32 conditional lowering");
-    assert!(branch_code.len() > 8, "conditional branch must emit both branch paths");
+    assert!(
+        branch_code.len() > 8,
+        "conditional branch must emit both branch paths"
+    );
 }
 
 #[test]
@@ -252,7 +341,13 @@ fn integrated_native_sia32_function_emits_bytes() {
         pos.ins().return_(&[zero]);
     }
     let code = compile_function(func).expect("integrated production SIA32 compilation");
-    assert!(code.len() > 16, "integrated SIA32 function emitted too little code");
+    assert!(
+        code.len() > 16,
+        "integrated SIA32 function emitted too little code"
+    );
     assert_eq!(code.len() % 2, 0, "SIA32 native output is word aligned");
-    assert!(code.windows(2).any(|word| word == [0xe0, 0xc0]), "integrated function must emit ret");
+    assert!(
+        code.windows(2).any(|word| word == [0xe0, 0xc0]),
+        "integrated function must emit ret"
+    );
 }

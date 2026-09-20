@@ -14,9 +14,14 @@ pub(crate) struct I64Words {
 
 impl I64Words {
     pub(crate) const fn from_u64(value: u64) -> Self {
-        Self { low: value as u32, high: (value >> 32) as u32 }
+        Self {
+            low: value as u32,
+            high: (value >> 32) as u32,
+        }
     }
-    pub(crate) const fn to_u64(self) -> u64 { (self.low as u64) | ((self.high as u64) << 32) }
+    pub(crate) const fn to_u64(self) -> u64 {
+        (self.low as u64) | ((self.high as u64) << 32)
+    }
 }
 
 /// Allocatable architectural register pair for one I64 value.
@@ -46,11 +51,26 @@ impl I64RegPair {
 
 /// The only register pairs the future I64 allocator/lowering may use.
 pub(crate) const I64_ALLOCATABLE_PAIRS: [I64RegPair; 5] = [
-    I64RegPair { low: Reg::new(1).unwrap(), high: Reg::new(2).unwrap() },
-    I64RegPair { low: Reg::new(3).unwrap(), high: Reg::new(4).unwrap() },
-    I64RegPair { low: Reg::new(5).unwrap(), high: Reg::new(6).unwrap() },
-    I64RegPair { low: Reg::new(7).unwrap(), high: Reg::new(8).unwrap() },
-    I64RegPair { low: Reg::new(9).unwrap(), high: Reg::new(10).unwrap() },
+    I64RegPair {
+        low: Reg::new(1).unwrap(),
+        high: Reg::new(2).unwrap(),
+    },
+    I64RegPair {
+        low: Reg::new(3).unwrap(),
+        high: Reg::new(4).unwrap(),
+    },
+    I64RegPair {
+        low: Reg::new(5).unwrap(),
+        high: Reg::new(6).unwrap(),
+    },
+    I64RegPair {
+        low: Reg::new(7).unwrap(),
+        high: Reg::new(8).unwrap(),
+    },
+    I64RegPair {
+        low: Reg::new(9).unwrap(),
+        high: Reg::new(10).unwrap(),
+    },
 ];
 
 pub(crate) const I64_STACK_SIZE: u32 = 8;
@@ -86,7 +106,13 @@ pub(crate) const SUB64_SEQUENCE: [PairArithmeticStep; 4] = [
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum I64ExpensiveOp { Mul, SignedDiv, UnsignedDiv, SignedRem, UnsignedRem }
+pub(crate) enum I64ExpensiveOp {
+    Mul,
+    SignedDiv,
+    UnsignedDiv,
+    SignedRem,
+    UnsignedRem,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct HelperCallPolicy {
@@ -112,9 +138,12 @@ pub(crate) const fn helper_policy(op: I64ExpensiveOp) -> HelperCallPolicy {
     };
     HelperCallPolicy {
         symbol,
-        lhs_low: Reg::new(1).unwrap(), lhs_high: Reg::new(2).unwrap(),
-        rhs_low: Reg::new(3).unwrap(), rhs_high: Reg::new(4).unwrap(),
-        ret_low: Reg::new(1).unwrap(), ret_high: Reg::new(2).unwrap(),
+        lhs_low: Reg::new(1).unwrap(),
+        lhs_high: Reg::new(2).unwrap(),
+        rhs_low: Reg::new(3).unwrap(),
+        rhs_high: Reg::new(4).unwrap(),
+        ret_low: Reg::new(1).unwrap(),
+        ret_high: Reg::new(2).unwrap(),
     }
 }
 
@@ -135,12 +164,20 @@ pub(crate) const fn sub_reference(lhs: I64Words, rhs: I64Words) -> I64Words {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn r(n: u8) -> Reg { Reg::new(n).unwrap() }
+    fn r(n: u8) -> Reg {
+        Reg::new(n).unwrap()
+    }
 
     #[test]
     fn word_order_is_low_then_high_little_endian() {
         let words = I64Words::from_u64(0x1122_3344_5566_7788);
-        assert_eq!(words, I64Words { low: 0x5566_7788, high: 0x1122_3344 });
+        assert_eq!(
+            words,
+            I64Words {
+                low: 0x5566_7788,
+                high: 0x1122_3344
+            }
+        );
         assert_eq!(words.to_u64(), 0x1122_3344_5566_7788);
         assert_eq!((I64_LOW_WORD_OFFSET, I64_HIGH_WORD_OFFSET), (0, 4));
         assert_eq!((I64_STACK_SIZE, I64_STACK_ALIGN), (8, 8));
@@ -148,7 +185,9 @@ mod tests {
 
     #[test]
     fn only_frozen_odd_even_allocatable_pairs_are_valid() {
-        for pair in I64_ALLOCATABLE_PAIRS { assert_eq!(I64RegPair::new(pair.low, pair.high), Some(pair)); }
+        for pair in I64_ALLOCATABLE_PAIRS {
+            assert_eq!(I64RegPair::new(pair.low, pair.high), Some(pair));
+        }
         assert_eq!(I64RegPair::new(r(2), r(3)), None);
         assert_eq!(I64RegPair::new(r(11), r(12)), None);
         assert_eq!(I64RegPair::new(r(12), r(13)), None);
@@ -157,20 +196,56 @@ mod tests {
 
     #[test]
     fn carry_and_borrow_sequences_are_frozen() {
-        assert_eq!(ADD64_SEQUENCE, [PairArithmeticStep::AddLow, PairArithmeticStep::CarryIfLowUnsignedLessThanLhs, PairArithmeticStep::AddHigh, PairArithmeticStep::AddCarryToHigh]);
-        assert_eq!(SUB64_SEQUENCE, [PairArithmeticStep::SubLow, PairArithmeticStep::BorrowIfLhsLowUnsignedLessThanRhs, PairArithmeticStep::SubHigh, PairArithmeticStep::SubBorrowFromHigh]);
+        assert_eq!(
+            ADD64_SEQUENCE,
+            [
+                PairArithmeticStep::AddLow,
+                PairArithmeticStep::CarryIfLowUnsignedLessThanLhs,
+                PairArithmeticStep::AddHigh,
+                PairArithmeticStep::AddCarryToHigh
+            ]
+        );
+        assert_eq!(
+            SUB64_SEQUENCE,
+            [
+                PairArithmeticStep::SubLow,
+                PairArithmeticStep::BorrowIfLhsLowUnsignedLessThanRhs,
+                PairArithmeticStep::SubHigh,
+                PairArithmeticStep::SubBorrowFromHigh
+            ]
+        );
         let a = I64Words::from_u64(0x0000_0001_ffff_ffff);
-        assert_eq!(add_reference(a, I64Words::from_u64(1)).to_u64(), 0x0000_0002_0000_0000);
-        assert_eq!(sub_reference(I64Words::from_u64(0x0000_0002_0000_0000), I64Words::from_u64(1)).to_u64(), 0x0000_0001_ffff_ffff);
+        assert_eq!(
+            add_reference(a, I64Words::from_u64(1)).to_u64(),
+            0x0000_0002_0000_0000
+        );
+        assert_eq!(
+            sub_reference(
+                I64Words::from_u64(0x0000_0002_0000_0000),
+                I64Words::from_u64(1)
+            )
+            .to_u64(),
+            0x0000_0001_ffff_ffff
+        );
     }
 
     #[test]
     fn expensive_operations_have_stable_helpers_and_pair_abi() {
-        let cases = [(I64ExpensiveOp::Mul,"__sia32_i64_mul"),(I64ExpensiveOp::SignedDiv,"__sia32_i64_sdiv"),(I64ExpensiveOp::UnsignedDiv,"__sia32_i64_udiv"),(I64ExpensiveOp::SignedRem,"__sia32_i64_srem"),(I64ExpensiveOp::UnsignedRem,"__sia32_i64_urem")];
+        let cases = [
+            (I64ExpensiveOp::Mul, "__sia32_i64_mul"),
+            (I64ExpensiveOp::SignedDiv, "__sia32_i64_sdiv"),
+            (I64ExpensiveOp::UnsignedDiv, "__sia32_i64_udiv"),
+            (I64ExpensiveOp::SignedRem, "__sia32_i64_srem"),
+            (I64ExpensiveOp::UnsignedRem, "__sia32_i64_urem"),
+        ];
         for (op, symbol) in cases {
-            let p = helper_policy(op); assert_eq!(p.symbol, symbol);
-            assert_eq!((p.lhs_low,p.lhs_high,p.rhs_low,p.rhs_high),(r(1),r(2),r(3),r(4)));
-            assert_eq!((p.ret_low,p.ret_high),(r(1),r(2)));
+            let p = helper_policy(op);
+            assert_eq!(p.symbol, symbol);
+            assert_eq!(
+                (p.lhs_low, p.lhs_high, p.rhs_low, p.rhs_high),
+                (r(1), r(2), r(3), r(4))
+            );
+            assert_eq!((p.ret_low, p.ret_high), (r(1), r(2)));
         }
     }
 }

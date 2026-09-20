@@ -74,9 +74,9 @@ pub fn compile<B: LowerBackend + TargetIsa>(
                 );
                 err
             })
-            .unwrap_or_else(|err| panic!(
-                "register allocation failed: {err:?}\n\nVCode:\n{vcode:?}\n\nCLIF:\n{f:?}"
-            ));
+            .unwrap_or_else(|err| {
+                panic!("register allocation failed: {err:?}\n\nVCode:\n{vcode:?}\n\nCLIF:\n{f:?}")
+            });
     }
 
     // Run the regalloc checker, if requested.

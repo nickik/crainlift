@@ -16,8 +16,12 @@ pub(crate) enum LabelUse {
 }
 
 impl LabelUse {
-    fn read_word(buffer: &[u8]) -> u16 { u16::from_le_bytes([buffer[0], buffer[1]]) }
-    fn write_word(buffer: &mut [u8], word: u16) { buffer[..2].copy_from_slice(&word.to_le_bytes()); }
+    fn read_word(buffer: &[u8]) -> u16 {
+        u16::from_le_bytes([buffer[0], buffer[1]])
+    }
+    fn write_word(buffer: &mut [u8], word: u16) {
+        buffer[..2].copy_from_slice(&word.to_le_bytes());
+    }
 
     fn branch_disp_halfwords(use_offset: CodeOffset, label_offset: CodeOffset) -> i64 {
         let delta = i64::from(label_offset) - (i64::from(use_offset) + 2);
@@ -26,7 +30,11 @@ impl LabelUse {
     }
 
     pub(crate) fn literal_disp_words(use_offset: CodeOffset, label_offset: CodeOffset) -> i64 {
-        assert_eq!(label_offset & 3, 0, "SIA literal target must be 4-byte aligned");
+        assert_eq!(
+            label_offset & 3,
+            0,
+            "SIA literal target must be 4-byte aligned"
+        );
         let base = (u64::from(use_offset) + 4) & !3;
         let delta = i64::from(label_offset) - base as i64;
         assert_eq!(delta & 3, 0, "SIA literal displacement must be word-scaled");
@@ -53,7 +61,10 @@ impl MachInstLabelUse for LabelUse {
         }
     }
 
-    fn patch_size(self) -> CodeOffset { let _ = self; 2 }
+    fn patch_size(self) -> CodeOffset {
+        let _ = self;
+        2
+    }
 
     fn patch(self, buffer: &mut [u8], use_offset: CodeOffset, label_offset: CodeOffset) {
         assert!(buffer.len() >= 2);
@@ -78,7 +89,9 @@ impl MachInstLabelUse for LabelUse {
         Self::write_word(buffer, patched);
     }
 
-    fn supports_veneer(self) -> bool { matches!(self, Self::Cond7 | Self::Branch11) }
+    fn supports_veneer(self) -> bool {
+        matches!(self, Self::Cond7 | Self::Branch11)
+    }
 
     fn veneer_size(self) -> CodeOffset {
         match self {
@@ -87,7 +100,9 @@ impl MachInstLabelUse for LabelUse {
         }
     }
 
-    fn worst_case_veneer_size() -> CodeOffset { 2 }
+    fn worst_case_veneer_size() -> CodeOffset {
+        2
+    }
 
     fn generate_veneer(self, buffer: &mut [u8], veneer_offset: CodeOffset) -> (CodeOffset, Self) {
         assert!(matches!(self, Self::Cond7 | Self::Branch11));
@@ -99,7 +114,9 @@ impl MachInstLabelUse for LabelUse {
         (veneer_offset, Self::Branch11)
     }
 
-    fn from_reloc(_reloc: Reloc, _addend: Addend) -> Option<Self> { None }
+    fn from_reloc(_reloc: Reloc, _addend: Addend) -> Option<Self> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -107,7 +124,9 @@ mod tests {
     use super::*;
     use crate::isa::sia32::regs::Reg;
 
-    fn r(n: u8) -> Reg { Reg::new(n).unwrap() }
+    fn r(n: u8) -> Reg {
+        Reg::new(n).unwrap()
+    }
 
     #[test]
     fn cond_fixup_is_relative_to_following_instruction() {

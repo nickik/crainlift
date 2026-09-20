@@ -3407,26 +3407,87 @@ pub(crate) fn define(
 
     // Target-specific protected-machine escape hatch used by the SIA32
     // freestanding pipeline. Backends without SIA32 semantics reject these.
-    ig.push(Inst::new("sia_trap", "SIA32 architectural TRAP imm8.", &formats.nullary_imm8)
-        .operands_in(&[Operand::new("code", &imm.uimm8)]).other_side_effects());
+    ig.push(
+        Inst::new(
+            "sia_trap",
+            "SIA32 architectural TRAP imm8.",
+            &formats.nullary_imm8,
+        )
+        .operands_in(&[Operand::new("code", &imm.uimm8)])
+        .other_side_effects(),
+    );
     ig.push(Inst::new("sia_gpr_read", "Read a fixed SIA32 architectural GPR selected by imm8. Reserved for ABI/trap boundaries.", &formats.nullary_imm8)
         .operands_in(&[Operand::new("register", &imm.uimm8)])
         .operands_out(&[Operand::new("value", i32_)]).other_side_effects());
     ig.push(Inst::new("sia_gpr_write", "Write a fixed SIA32 architectural GPR selected by imm8. Reserved for ABI/trap boundaries.", &formats.binary_imm8)
         .operands_in(&[Operand::new("value", i32_), Operand::new("register", &imm.uimm8)]).other_side_effects());
-    ig.push(Inst::new("sia_sread", "Read a SIA32-P system register selected by imm8.", &formats.nullary_imm8)
+    ig.push(
+        Inst::new(
+            "sia_sread",
+            "Read a SIA32-P system register selected by imm8.",
+            &formats.nullary_imm8,
+        )
         .operands_in(&[Operand::new("selector", &imm.uimm8)])
-        .operands_out(&[Operand::new("value", i32_)]).other_side_effects());
-    ig.push(Inst::new("sia_swrite", "Write a SIA32-P system register selected by imm8.", &formats.binary_imm8)
-        .operands_in(&[Operand::new("value", i32_), Operand::new("selector", &imm.uimm8)]).other_side_effects());
-    ig.push(Inst::new("sia_sret", "Return from SIA32-P trap context.", &formats.nullary).other_side_effects());
-    ig.push(Inst::new("sia_tlbfence", "Invalidate SIA32 translation state.", &formats.nullary).other_side_effects());
-    ig.push(Inst::new("sia_tlbfence_va", "Invalidate SIA32 translation state for a VA.", &formats.unary)
-        .operands_in(&[Operand::new("value", i32_)]).other_side_effects());
-    ig.push(Inst::new("sia_tlbfence_asid", "Invalidate SIA32 translation state for an ASID.", &formats.unary)
-        .operands_in(&[Operand::new("value", i32_)]).other_side_effects());
-    ig.push(Inst::new("sia_wfi", "Wait for a SIA32 interrupt.", &formats.nullary).other_side_effects());
-    ig.push(Inst::new("sia_sync_i", "Synchronize SIA32 instruction fetch.", &formats.nullary).other_side_effects());
+        .operands_out(&[Operand::new("value", i32_)])
+        .other_side_effects(),
+    );
+    ig.push(
+        Inst::new(
+            "sia_swrite",
+            "Write a SIA32-P system register selected by imm8.",
+            &formats.binary_imm8,
+        )
+        .operands_in(&[
+            Operand::new("value", i32_),
+            Operand::new("selector", &imm.uimm8),
+        ])
+        .other_side_effects(),
+    );
+    ig.push(
+        Inst::new(
+            "sia_sret",
+            "Return from SIA32-P trap context.",
+            &formats.nullary,
+        )
+        .other_side_effects(),
+    );
+    ig.push(
+        Inst::new(
+            "sia_tlbfence",
+            "Invalidate SIA32 translation state.",
+            &formats.nullary,
+        )
+        .other_side_effects(),
+    );
+    ig.push(
+        Inst::new(
+            "sia_tlbfence_va",
+            "Invalidate SIA32 translation state for a VA.",
+            &formats.unary,
+        )
+        .operands_in(&[Operand::new("value", i32_)])
+        .other_side_effects(),
+    );
+    ig.push(
+        Inst::new(
+            "sia_tlbfence_asid",
+            "Invalidate SIA32 translation state for an ASID.",
+            &formats.unary,
+        )
+        .operands_in(&[Operand::new("value", i32_)])
+        .other_side_effects(),
+    );
+    ig.push(
+        Inst::new("sia_wfi", "Wait for a SIA32 interrupt.", &formats.nullary).other_side_effects(),
+    );
+    ig.push(
+        Inst::new(
+            "sia_sync_i",
+            "Synchronize SIA32 instruction fetch.",
+            &formats.nullary,
+        )
+        .other_side_effects(),
+    );
 
     ig.push(
         Inst::new(
