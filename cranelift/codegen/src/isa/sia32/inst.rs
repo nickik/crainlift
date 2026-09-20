@@ -441,6 +441,12 @@ impl MachInstEmit for Inst {
             Self::Args { .. } | Self::Rets { .. } | Self::DummyUse { .. } => {}
             Self::Nop => put_word(code, encode::NOP),
             Self::SRead { dst, selector } => put_word(code, encode::sread(arch_reg(dst.to_reg()), *selector).expect("validated SREAD selector")),
+            Self::ReadFixedGpr { dst, index } => {
+                debug_assert_eq!(arch_reg(dst.to_reg()).index(), *index);
+            }
+            Self::WriteFixedGpr { src, index } => {
+                debug_assert_eq!(arch_reg(*src).index(), *index);
+            }
             Self::SWrite { src, selector } => put_word(code, encode::swrite(arch_reg(*src), *selector).expect("validated SWRITE selector")),
             Self::SSwapScratch { dst, src } => { let dst = arch_reg(dst.to_reg()); let src = arch_reg(*src); if dst != src { put_word(code, encode::mov(dst, src)); } put_word(code, encode::sswap_scratch(dst)); },
             Self::SRet => put_word(code, encode::sret()),
