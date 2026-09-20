@@ -400,7 +400,10 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         MInst::ReadFixedGpr { dst, index: register }
     }
     fn sia_m_gpr_write(&mut self, src: Reg, register: u8) -> MInst {
-        assert!(matches!(register, 1..=11 | 15), "fixed GPR write must name an ABI GPR");
+        assert!(
+            matches!(register, 1..=11 | 13 | 15),
+            "fixed GPR write must name an ABI GPR or architectural SP"
+        );
         MInst::WriteFixedGpr { src, index: register }
     }
     fn sia_m_sread(&mut self, dst: WritableReg, selector: u8) -> MInst { MInst::SRead { dst, selector } }
