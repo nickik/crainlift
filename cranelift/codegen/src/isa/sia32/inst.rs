@@ -70,6 +70,8 @@ pub(crate) enum Inst {
     IndexedStore { src: Reg, base: Reg, index: Reg },
     Fence,
     SRead { dst: Writable<Reg>, selector: u8 },
+    ReadFixedGpr { dst: Writable<Reg>, index: u8 },
+    WriteFixedGpr { src: Reg, index: u8 },
     SWrite { src: Reg, selector: u8 },
     SSwapScratch { dst: Writable<Reg>, src: Reg },
     SRet,
@@ -358,6 +360,14 @@ impl MachInst for Inst {
             Self::Nop | Self::SoftwareTrap { .. } | Self::Fence | Self::SRet | Self::TlbFence
             | Self::Wfi | Self::SyncI | Self::Jump { .. } | Self::Ret => {}
             Self::SRead { dst, .. } => collector.reg_def(dst),
+            Self::ReadFixedGpr { dst, index } => {
+                collector.reg_clobbers(regalloc2::PRegSet::empty().with(regs::preg(*index)));
+                collector.reg_def(dst);
+            }
+            Self::WriteFixedGpr { src, index } => {
+                collector.reg_use(src);
+                collector.reg_clobbers(regalloc2::PRegSet::empty().with(regs::preg(*index)));
+            }
             Self::SWrite { src, .. } | Self::SRetCtx { src } | Self::TlbFenceVa { src }
             | Self::TlbFenceAsid { src } => collector.reg_use(src),
             Self::SSwapScratch { dst, src } => { collector.reg_use(src); collector.reg_def(dst); }
@@ -437,6 +447,20 @@ impl MachInstEmit for Inst {
             Self::Args { .. } | Self::Rets { .. } | Self::DummyUse { .. } => {}
             Self::Nop => put_word(code, encode::NOP),
             Self::SRead { dst, selector } => put_word(code, encode::sread(arch_reg(dst.to_reg()), *selector).expect("validated SREAD selector")),
+            Self::ReadFixedGpr { dst, index } => {
+                let dst = arch_reg(dst.to_reg());
+                let fixed = regs::Reg::new(*index).expect("validated fixed GPR index");
+                if dst != fixed {
+                    put_word(code, encode::mov(dst, fixed));
+                }
+            }
+            Self::WriteFixedGpr { src, index } => {
+                let src = arch_reg(*src);
+                let fixed = regs::Reg::new(*index).expect("validated fixed GPR index");
+                if src != fixed {
+                    put_word(code, encode::mov(fixed, src));
+                }
+            }
             Self::SWrite { src, selector } => put_word(code, encode::swrite(arch_reg(*src), *selector).expect("validated SWRITE selector")),
             Self::SSwapScratch { dst, src } => { let dst = arch_reg(dst.to_reg()); let src = arch_reg(*src); if dst != src { put_word(code, encode::mov(dst, src)); } put_word(code, encode::sswap_scratch(dst)); },
             Self::SRet => put_word(code, encode::sret()),
