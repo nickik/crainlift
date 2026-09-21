@@ -99,7 +99,7 @@
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_icmp dst cc lhs rhs) dst)))
 
-(rule (lower (icmp cc x @ (value_type (fits_in_32 (ty_int _))) y))
+(rule (lower (icmp (fits_in_32 (ty_int _)) cc x y))
       (sia_icmp_result cc x y))
 
 ;;;; Extension / reduction ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
