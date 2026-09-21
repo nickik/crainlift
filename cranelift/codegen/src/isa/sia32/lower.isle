@@ -87,21 +87,6 @@
             (src Reg (put_in_reg x)))
         (sia_emit_result (sia_popcnt dst src) dst)))
 
-;;;; Integer comparisons ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; SIA compare instructions produce a canonical integer boolean in the
-;; destination register. CLIF icmp itself is I8, but SIA scalar registers are
-;; represented as I32 and the normal value-reg machinery exposes the low byte.
-(decl sia_icmp_result (IntCC Value Value) InstOutput)
-(rule (sia_icmp_result cc x y)
-      (let ((dst WritableReg (temp_writable_reg $I8))
-            (lhs Reg (put_in_reg x))
-            (rhs Reg (put_in_reg y)))
-        (sia_emit_result (sia_icmp dst cc lhs rhs) dst)))
-
-(rule (lower (icmp (fits_in_32 (ty_int _)) cc x y))
-      (sia_icmp_result cc x y))
-
 ;;;; Extension / reduction ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (decl sia_extend_result (Value bool u8) InstOutput)
