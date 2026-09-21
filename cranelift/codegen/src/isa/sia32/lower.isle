@@ -109,6 +109,14 @@
 (rule (lower (ireduce $I8 x @ (value_type $I32))) (output_value x))
 (rule (lower (ireduce $I16 x @ (value_type $I32))) (output_value x))
 
+;; I64 values use two 32-bit registers on SIA32. Cranelift ValueRegs are
+;; ordered low word first for the backend's native pair representation, so
+;; reducing I64 to I32 is a zero-instruction projection of register 0.
+(rule (lower (ireduce $I32 x @ (value_type $I64)))
+      (let ((regs ValueRegs (put_in_regs x))
+            (lo Reg (value_regs_get regs 0)))
+        (output_reg lo)))
+
 ;;;; Integer comparisons ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (decl rec sia_icmp_result (IntCC Value Value) InstOutput)
 (rule (sia_icmp_result (IntCC.Equal) x y)
