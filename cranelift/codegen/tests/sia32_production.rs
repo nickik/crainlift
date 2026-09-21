@@ -353,7 +353,6 @@ fn integrated_native_sia32_function_emits_bytes() {
     );
 }
 
-
 #[test]
 fn sia32_integer_comparisons_compile_to_canonical_booleans() {
     let cases = [
@@ -375,7 +374,9 @@ fn sia32_integer_comparisons_compile_to_canonical_booleans() {
             let rhs = pos.ins().iconst(I32, 0);
             pos.ins().icmp(cc, lhs, rhs)
         })
-        .unwrap_or_else(|error| panic!("SIA32 {cc:?} must lower through the production pipeline: {error}"));
+        .unwrap_or_else(|error| {
+            panic!("SIA32 {cc:?} must lower through the production pipeline: {error}")
+        });
         assert!(!code.is_empty(), "{cc:?} emitted no code");
         assert_eq!(code.len() % 2, 0, "{cc:?} output must be halfword aligned");
     }
