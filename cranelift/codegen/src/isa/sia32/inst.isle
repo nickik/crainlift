@@ -156,3 +156,9 @@
 (decl sia_call (BoxCallInfo) SideEffectNoResult)
 (rule (sia_call info)
       (SideEffectNoResult.Inst (MInst.Call info)))
+
+
+;;;; I64 pair helpers ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(decl sia_ireduce_i64_low (Value) Reg)
+(extern constructor sia_ireduce_i64_low sia_ireduce_i64_low)
