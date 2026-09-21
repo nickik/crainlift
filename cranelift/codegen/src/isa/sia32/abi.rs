@@ -322,7 +322,7 @@ impl ABIMachineSpec for Sia32MachineDeps {
         frame_layout: &FrameLayout,
     ) -> SmallInstVec<Inst> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
-        let mut out = SmallInstVec::new();
+        let out = SmallInstVec::new();
         let _ = frame_layout;
         out
     }
@@ -334,7 +334,7 @@ impl ABIMachineSpec for Sia32MachineDeps {
         frame_layout: &FrameLayout,
     ) -> SmallInstVec<Inst> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
-        let mut out = SmallInstVec::new();
+        let out = SmallInstVec::new();
         let _ = frame_layout;
         out
     }
