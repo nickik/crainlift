@@ -415,10 +415,19 @@ pub(crate) fn lower(
     let mut isle_ctx = Sia32IsleContext::new(lower_ctx, backend);
     let lowered = generated_code::constructor_lower(&mut isle_ctx, inst);
 
-    debug_assert!(
-        lowered.is_some() || !matches!(opcode, Opcode::Ireduce),
-        "SIA32 ireduce lowering unexpectedly returned None for {inst:?}"
-    );
+    if lowered.is_none() {
+        let data = &isle_ctx.lower_ctx.dfg().insts[inst];
+        let result_types: Vec<_> = isle_ctx
+            .lower_ctx
+            .dfg()
+            .inst_results(inst)
+            .iter()
+            .map(|&value| isle_ctx.lower_ctx.dfg().value_type(value))
+            .collect();
+        panic!(
+            "SIA32 ISLE lowering returned None: inst={inst:?}, opcode={opcode:?}, data={data:?}, result_types={result_types:?}"
+        );
+    }
 
     lowered
 }
