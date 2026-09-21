@@ -137,3 +137,22 @@
 (rule (lower_branch (brif cond _ _) (two_targets taken not_taken))
       (let ((test Reg (put_in_reg cond)))
         (emit_side_effect (SideEffectNoResult.Inst (sia_brnz test taken not_taken)))))
+
+;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Keep the abstract StackSlot until frame layout is finalized. The shared ABI
+;; helper invokes Sia32MachineDeps::gen_get_stack_addr(), producing StackAddr
+;; with the appropriate StackAMode.
+(decl stack_addr_impl (StackSlot Offset32 Type) InstOutput)
+(rule (stack_addr_impl stack_slot offset ty)
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (_ Unit (emit (abi_stackslot_addr dst stack_slot offset))))
+        (output_reg (writable_reg_to_reg dst))))
+
+(rule (lower (stack_addr (fits_in_32 (ty_int ty)) stack_slot offset))
+      (stack_addr_impl stack_slot offset ty))
+
+;;;; Traps ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule (lower (trap code))
+      (side_effect (SideEffectNoResult.Inst (MInst.Trap code))))

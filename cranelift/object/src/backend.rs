@@ -66,11 +66,13 @@ impl ObjectBuilder {
         libcall_names: Box<dyn Fn(ir::LibCall) -> String + Send + Sync>,
     ) -> ModuleResult<Self> {
         let mut file_flags = object::FileFlags::None;
-        let sia32_bare_metal = matches!(isa.triple().architecture, target_lexicon::Architecture::Sia32)
-            && matches!(
-                isa.triple().binary_format,
-                target_lexicon::BinaryFormat::Unknown
-            );
+        let sia32_bare_metal = matches!(
+            isa.triple().architecture,
+            target_lexicon::Architecture::Sia32
+        ) && matches!(
+            isa.triple().binary_format,
+            target_lexicon::BinaryFormat::Unknown
+        );
         let binary_format = match isa.triple().binary_format {
             target_lexicon::BinaryFormat::Elf => object::BinaryFormat::Elf,
             target_lexicon::BinaryFormat::Coff => object::BinaryFormat::Coff,
@@ -567,9 +569,9 @@ impl Module for ObjectModule {
             PointerWidth::U64 => Reloc::Abs8,
         };
         let data_relocs = data.all_relocs(pointer_reloc).collect::<Vec<_>>();
-        if self.sia32_private_elf && !data_relocs.is_empty() {
+        if self.sia32_private_elf && data_relocs.iter().any(|reloc| reloc.kind != Reloc::Abs4) {
             return Err(ModuleError::Backend(anyhow!(
-                "SIA32 R0 ELF output supports relocation-free data only; define SIA relocation semantics before emitting references",
+                "SIA32 R0 ELF data output currently supports only 32-bit absolute relocations",
             )));
         }
         let relocs = data_relocs

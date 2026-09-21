@@ -14,6 +14,8 @@
     (Mov
       (dst WritableReg)
       (src Reg))
+    (Trap
+      (code TrapCode))
     (StackAddr
       (dst WritableReg)
       (mem StackAMode))

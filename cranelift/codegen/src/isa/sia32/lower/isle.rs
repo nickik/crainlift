@@ -4,18 +4,16 @@ pub mod generated_code;
 
 use self::generated_code::MInst;
 use crate::ir::condcodes::{FloatCC, IntCC};
+use crate::ir::{
+    BlockCall, Inst, InstructionData, MemFlagsData, Opcode, TrapCode, Type, Value, ValueList,
+    immediates::*, types::*,
+};
 use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
 use crate::machinst::isle::*;
 use crate::machinst::{
     CallArgList, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
     VCodeConstantData, VCodeInst,
-};
-use crate::{
-    ir::{
-        BlockCall, Inst, InstructionData, MemFlagsData, Opcode, TrapCode, Type, Value, ValueList,
-        immediates::*, types::*,
-    },
 };
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -65,7 +63,9 @@ impl From<MachineInst> for MInst {
         match inst {
             MachineInst::Mov { dst, src } => Self::Mov { dst, src },
             MachineInst::StackAddr { dst, mem } => Self::StackAddr { dst, mem },
-            other => panic!("SIA ISLE wrapper cannot represent shared-prelude instruction {other:?}"),
+            other => {
+                panic!("SIA ISLE wrapper cannot represent shared-prelude instruction {other:?}")
+            }
         }
     }
 }
@@ -76,6 +76,7 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             dst: *dst,
             src: *src,
         },
+        MInst::Trap { code } => MachineInst::Trap { code: *code },
         MInst::StackAddr { dst, mem } => MachineInst::StackAddr {
             dst: *dst,
             mem: *mem,
