@@ -162,3 +162,7 @@
 
 (decl sia_ireduce_i64_low (Value) Reg)
 (extern constructor sia_ireduce_i64_low sia_ireduce_i64_low)
+(decl sia_iconst_i64 (u64) InstOutput)
+(extern constructor sia_iconst_i64 sia_iconst_i64)
+(decl sia_uextend_i32_i64 (Value) InstOutput)
+(extern constructor sia_uextend_i32_i64 sia_uextend_i32_i64)
