@@ -319,6 +319,12 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         MInst::Cpop { dst, src }
     }
 
+    fn sia_ireduce_i64_low(&mut self, value: Value) -> Reg {
+        let regs = self.lower_ctx.put_value_in_regs(value);
+        debug_assert_eq!(regs.regs().len(), 2, "SIA32 i64 values must be two-register pairs");
+        regs.regs()[0]
+    }
+
     fn sia_extend(
         &mut self,
         dst: WritableReg,
