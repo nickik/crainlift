@@ -97,6 +97,24 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             lhs: *lhs,
             rhs: *rhs,
         },
+        MInst::CmpEq { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::CmpEq,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::CmpLt { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::CmpLt,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
+        MInst::CmpLtu { dst, lhs, rhs } => MachineInst::TwoOp {
+            op: TwoOp::CmpLtu,
+            dst: *dst,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
         MInst::Sub { dst, lhs, rhs } => MachineInst::TwoOp {
             op: TwoOp::Sub,
             dst: *dst,
