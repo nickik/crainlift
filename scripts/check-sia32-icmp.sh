@@ -23,7 +23,7 @@ run cargo test -p cranelift-codegen --test sia32_production \
     sia32_integer_comparisons_compile_to_canonical_booleans -- --exact --nocapture
 
 if [[ "${1:-}" == "full" ]]; then
-    run scripts/check-sia32-m5.sh full
+    run bash scripts/check-sia32-m5.sh full
 else
     echo
     echo "Focused icmp gate passed. Run '$0 full' before merge."
