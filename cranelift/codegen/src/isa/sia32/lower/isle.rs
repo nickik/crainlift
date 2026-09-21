@@ -12,12 +12,14 @@ use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
 use crate::machinst::isle::*;
 use crate::machinst::{
-    CallArgList, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
+    CallArgList, CallInfo, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode, VCodeConstant,
     VCodeConstantData, VCodeInst,
 };
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use regalloc2::PReg;
+
+type BoxCallInfo = Box<CallInfo<crate::ir::ExternalName>>;
 
 // `increment_lowered_uses` in the pinned Cranelift revision is cfg-gated to the
 // pre-existing native backends. The shared ISLE prelude only needs the semantic
@@ -192,6 +194,7 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             taken: *taken,
             not_taken: *not_taken,
         },
+        MInst::Call { info } => MachineInst::Call { info: info.clone() },
     }
 }
 
@@ -200,6 +203,27 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn emit(&mut self, inst: &MInst) -> Unit {
         self.lower_ctx.emit(into_machine_inst(inst));
+    }
+
+    fn gen_call_info(
+        &mut self,
+        sig: Sig,
+        dest: crate::ir::ExternalName,
+        uses: CallArgList,
+        defs: CallRetList,
+        try_call_info: Option<crate::machinst::TryCallInfo>,
+        patchable: bool,
+    ) -> BoxCallInfo {
+        let stack_ret_space = self.lower_ctx.sigs()[sig].sized_stack_ret_space();
+        let stack_arg_space = self.lower_ctx.sigs()[sig].sized_stack_arg_space();
+        self.lower_ctx
+            .abi_mut()
+            .accumulate_outgoing_args_size(stack_ret_space + stack_arg_space);
+
+        Box::new(
+            self.lower_ctx
+                .gen_call_info(sig, dest, uses, defs, try_call_info, patchable),
+        )
     }
 
     fn sia_load_const(&mut self, dst: WritableReg, value: u64) -> MInst {
