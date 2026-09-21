@@ -10,7 +10,6 @@ use crate::ir::{
 };
 use crate::isa::sia32::Sia32Backend;
 use crate::isa::sia32::inst::{Inst as MachineInst, TwoOp, UnaryOp};
-use crate::isa::sia32::regs;
 use crate::machinst::isle::*;
 use crate::machinst::{
     CallArgList, CallInfo, CallRetList, InstOutput, Lower, MachLabel, Reg, StackAMode,
@@ -197,6 +196,12 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             dst: *dst,
             src: *src,
         },
+        MInst::Icmp { dst, cc, lhs, rhs } => MachineInst::Icmp {
+            dst: *dst,
+            cc: *cc,
+            lhs: *lhs,
+            rhs: *rhs,
+        },
         MInst::Extend {
             dst,
             src,
@@ -371,6 +376,15 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn sia_popcnt(&mut self, dst: WritableReg, src: Reg) -> MInst {
         MInst::Cpop { dst, src }
+    }
+
+    fn sia_icmp(&mut self, dst: WritableReg, cc: &IntCC, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::Icmp {
+            dst,
+            cc: *cc,
+            lhs,
+            rhs,
+        }
     }
 
     fn sia_extend(

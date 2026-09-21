@@ -4,10 +4,10 @@
 //! unreachable features that are outside the initial contract (by-value struct
 //! ABI synthesis, stack probing, tail calls, floating point and vectors).
 
-use super::inst::{Inst, LoadOp, StoreOp};
+use super::inst::Inst;
 use super::regs;
 use super::settings::Flags as SiaFlags;
-use crate::ir::types::{I8, I16, I32, I64};
+use crate::ir::types::I32;
 use crate::ir::{self, Signature, Type};
 use crate::isa;
 use crate::machinst::{
@@ -322,7 +322,7 @@ impl ABIMachineSpec for Sia32MachineDeps {
         frame_layout: &FrameLayout,
     ) -> SmallInstVec<Inst> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
-        let mut out = SmallInstVec::new();
+        let out = SmallInstVec::new();
         let _ = frame_layout;
         out
     }
@@ -334,7 +334,7 @@ impl ABIMachineSpec for Sia32MachineDeps {
         frame_layout: &FrameLayout,
     ) -> SmallInstVec<Inst> {
         ensure_call_conv(call_conv).expect("unsupported SIA32 calling convention");
-        let mut out = SmallInstVec::new();
+        let out = SmallInstVec::new();
         let _ = frame_layout;
         out
     }
@@ -575,6 +575,5 @@ mod tests {
             I32,
         );
         assert!(matches!(load, Inst::LoadBaseOffset { .. }));
-        let _ = (LoadOp::I8, StoreOp::I8, I8, I16, I64);
     }
 }

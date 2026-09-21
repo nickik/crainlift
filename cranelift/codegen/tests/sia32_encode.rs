@@ -22,7 +22,7 @@ fn sia32_target_lookup_reports_frozen_frontend_properties() {
     assert_eq!(target.pointer_bits(), 32);
     assert_eq!(target.pointer_bytes(), 4);
     assert_eq!(target.frontend_config().page_size_align_log2, 11);
-    assert_eq!(target.function_alignment().minimum, 2);
+    assert_eq!(target.function_alignment().minimum, 4);
     assert_eq!(target.function_alignment().preferred, 4);
     assert!(isa::ALL_ARCHITECTURES.contains(&"sia32"));
 }

@@ -74,6 +74,11 @@
     (Cpop
       (dst WritableReg)
       (src Reg))
+    (Icmp
+      (dst WritableReg)
+      (cc IntCC)
+      (lhs Reg)
+      (rhs Reg))
     (Extend
       (dst WritableReg)
       (src Reg)
@@ -155,6 +160,8 @@
 (extern constructor sia_ctz sia_ctz)
 (decl sia_popcnt (WritableReg Reg) MInst)
 (extern constructor sia_popcnt sia_popcnt)
+(decl sia_icmp (WritableReg IntCC Reg Reg) MInst)
+(extern constructor sia_icmp sia_icmp)
 (decl sia_extend (WritableReg Reg bool u8 u8) MInst)
 (extern constructor sia_extend sia_extend)
 (decl sia_load_offset (WritableReg Reg i32 Type) MInst)
