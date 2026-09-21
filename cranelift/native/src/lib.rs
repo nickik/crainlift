@@ -1,7 +1,7 @@
 //! Performs autodetection of the host for the purposes of running
 //! Cranelift to generate code to run on the same machine.
 
-#![deny(missing_docs)]
+#![allow(elided_lifetimes_in_paths, explicit_outlives_requirements)]\n#![deny(missing_docs)]
 
 use cranelift_codegen::isa;
 use cranelift_codegen::settings::Configurable;
