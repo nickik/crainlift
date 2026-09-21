@@ -138,6 +138,12 @@
       (let ((test Reg (put_in_reg cond)))
         (emit_side_effect (SideEffectNoResult.Inst (sia_brnz test taken not_taken)))))
 
+;;;; Symbol addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule (lower (symbol_value $I32 (symbol_value_data name _ offset)))
+      (let ((dst WritableReg (temp_writable_reg $I32)))
+        (sia_emit_result (sia_load_ext_name dst name offset) dst)))
+
 ;;;; Calls ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; SIA32 direct calls always use the backend's literal-pool target sequence, so
