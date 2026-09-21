@@ -29,7 +29,7 @@
 //!   references allocated from an associated memory pool. It has a much smaller footprint than
 //!   `Vec`.
 
-#![deny(missing_docs)]
+#![allow(elided_lifetimes_in_paths, explicit_outlives_requirements)]\n#![deny(missing_docs)]
 #![no_std]
 
 extern crate alloc;
