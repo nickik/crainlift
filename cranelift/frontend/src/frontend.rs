@@ -86,7 +86,7 @@ impl FunctionBuilderContext {
 
 /// Implementation of the [`InstBuilder`] that has
 /// one convenience method per Cranelift IR instruction.
-pub struct FuncInstBuilder<'short, 'long: 'short> {
+pub struct FuncInstBuilder<'short, 'long> {
     builder: &'short mut FunctionBuilder<'long>,
     block: Block,
 }

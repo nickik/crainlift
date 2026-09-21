@@ -195,12 +195,15 @@ pub mod display {
     use alloc::string::ToString;
     use core::fmt;
 
-    pub fn callq_d(f: &mut fmt::Formatter, inst: &inst::callq_d) -> fmt::Result {
+    pub fn callq_d(f: &mut fmt::Formatter<'_>, inst: &inst::callq_d) -> fmt::Result {
         let inst::callq_d { imm32 } = inst;
         display_displacement(f, "callq", i64::from(imm32.value()) + 5)
     }
 
-    pub fn callq_m<R: Registers>(f: &mut fmt::Formatter, inst: &inst::callq_m<R>) -> fmt::Result {
+    pub fn callq_m<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::callq_m<R>,
+    ) -> fmt::Result {
         let inst::callq_m { rm64 } = inst;
         // XED writes the target plainly, without the indirect `*`.
         if f.alternate() {
@@ -227,7 +230,7 @@ pub mod display {
     }
 
     /// Render a possibly-memory XMM operand in the dialect `f` asks for.
-    fn xmm_mem<X: AsReg, M: AsReg>(f: &fmt::Formatter, op: &XmmMem<X, M>) -> String {
+    fn xmm_mem<X: AsReg, M: AsReg>(f: &fmt::Formatter<'_>, op: &XmmMem<X, M>) -> String {
         if f.alternate() {
             op.to_string_xed()
         } else {
@@ -238,7 +241,7 @@ pub mod display {
     /// XED appends a width marker to the generic `cmp*` form when the operand
     /// is memory; see `dsl::Inst::xed_mnemonics`.
     fn marker<X: AsReg, M: AsReg>(
-        f: &fmt::Formatter,
+        f: &fmt::Formatter<'_>,
         op: &XmmMem<X, M>,
         marker: &'static str,
     ) -> &'static str {
@@ -254,7 +257,7 @@ pub mod display {
     /// predicate immediate.
     macro_rules! cmp {
         ($($name:ident($sfx:tt, $op:ident, $mark:tt);)*) => ($(
-            pub fn $name<R: Registers>(f: &mut fmt::Formatter, inst: &inst::$name<R>) -> fmt::Result {
+            pub fn $name<R: Registers>(f: &mut fmt::Formatter<'_>, inst: &inst::$name<R>) -> fmt::Result {
                 let xmm1 = inst.xmm1.to_string();
                 let op = xmm_mem(f, &inst.$op);
                 let pred = inst.imm8.value();
@@ -319,7 +322,7 @@ pub mod display {
     /// The VEX compare pseudo-ops; see the `cmp!` macro above.
     macro_rules! vcmp {
         ($($name:ident($sfx:tt, $op:ident, $mark:tt);)*) => ($(
-            pub fn $name<R: Registers>(f: &mut fmt::Formatter, inst: &inst::$name<R>) -> fmt::Result {
+            pub fn $name<R: Registers>(f: &mut fmt::Formatter<'_>, inst: &inst::$name<R>) -> fmt::Result {
                 let xmm1 = inst.xmm1.to_string();
                 let xmm2 = inst.xmm2.to_string();
                 let op = xmm_mem(f, &inst.$op);
@@ -343,11 +346,11 @@ pub mod display {
         vcmppd_b("pd", xmm_m128, "x");
     }
 
-    pub fn nop_1b(f: &mut fmt::Formatter, _: &inst::nop_1b) -> fmt::Result {
+    pub fn nop_1b(f: &mut fmt::Formatter<'_>, _: &inst::nop_1b) -> fmt::Result {
         write!(f, "nop")
     }
 
-    pub fn nop_2b(f: &mut fmt::Formatter, _: &inst::nop_2b) -> fmt::Result {
+    pub fn nop_2b(f: &mut fmt::Formatter<'_>, _: &inst::nop_2b) -> fmt::Result {
         // XED spells the operand-size prefix out for the two-byte form.
         if f.alternate() {
             write!(f, "data16 nop")
@@ -356,15 +359,15 @@ pub mod display {
         }
     }
 
-    pub fn nop_3b(f: &mut fmt::Formatter, _: &inst::nop_3b) -> fmt::Result {
+    pub fn nop_3b(f: &mut fmt::Formatter<'_>, _: &inst::nop_3b) -> fmt::Result {
         write!(f, "nopl (%rax)")
     }
 
-    pub fn nop_4b(f: &mut fmt::Formatter, _: &inst::nop_4b) -> fmt::Result {
+    pub fn nop_4b(f: &mut fmt::Formatter<'_>, _: &inst::nop_4b) -> fmt::Result {
         write!(f, "nopl (%rax)")
     }
 
-    pub fn nop_5b(f: &mut fmt::Formatter, _: &inst::nop_5b) -> fmt::Result {
+    pub fn nop_5b(f: &mut fmt::Formatter<'_>, _: &inst::nop_5b) -> fmt::Result {
         if f.alternate() {
             write!(f, "nopl (%rax,%rax,1)")
         } else {
@@ -372,7 +375,7 @@ pub mod display {
         }
     }
 
-    pub fn nop_6b(f: &mut fmt::Formatter, _: &inst::nop_6b) -> fmt::Result {
+    pub fn nop_6b(f: &mut fmt::Formatter<'_>, _: &inst::nop_6b) -> fmt::Result {
         if f.alternate() {
             write!(f, "nopw (%rax,%rax,1)")
         } else {
@@ -380,11 +383,11 @@ pub mod display {
         }
     }
 
-    pub fn nop_7b(f: &mut fmt::Formatter, _: &inst::nop_7b) -> fmt::Result {
+    pub fn nop_7b(f: &mut fmt::Formatter<'_>, _: &inst::nop_7b) -> fmt::Result {
         write!(f, "nopl (%rax)")
     }
 
-    pub fn nop_8b(f: &mut fmt::Formatter, _: &inst::nop_8b) -> fmt::Result {
+    pub fn nop_8b(f: &mut fmt::Formatter<'_>, _: &inst::nop_8b) -> fmt::Result {
         if f.alternate() {
             write!(f, "nopl (%rax,%rax,1)")
         } else {
@@ -392,7 +395,7 @@ pub mod display {
         }
     }
 
-    pub fn nop_9b(f: &mut fmt::Formatter, _: &inst::nop_9b) -> fmt::Result {
+    pub fn nop_9b(f: &mut fmt::Formatter<'_>, _: &inst::nop_9b) -> fmt::Result {
         if f.alternate() {
             write!(f, "nopw (%rax,%rax,1)")
         } else {
@@ -454,102 +457,162 @@ pub mod display {
         write!(f, "xchg{suffix} {reg}, {mem}")
     }
 
-    pub fn sarb_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::sarb_m1<R>) -> fmt::Result {
+    pub fn sarb_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::sarb_m1<R>,
+    ) -> fmt::Result {
         let inst::sarb_m1 { rm8 } = inst;
         shift_m1::<R>(f, "sarb", rm8, Size::Byte)
     }
 
-    pub fn sarw_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::sarw_m1<R>) -> fmt::Result {
+    pub fn sarw_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::sarw_m1<R>,
+    ) -> fmt::Result {
         let inst::sarw_m1 { rm16 } = inst;
         shift_m1::<R>(f, "sarw", rm16, Size::Word)
     }
 
-    pub fn sarl_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::sarl_m1<R>) -> fmt::Result {
+    pub fn sarl_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::sarl_m1<R>,
+    ) -> fmt::Result {
         let inst::sarl_m1 { rm32 } = inst;
         shift_m1::<R>(f, "sarl", rm32, Size::Doubleword)
     }
 
-    pub fn sarq_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::sarq_m1<R>) -> fmt::Result {
+    pub fn sarq_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::sarq_m1<R>,
+    ) -> fmt::Result {
         let inst::sarq_m1 { rm64 } = inst;
         shift_m1::<R>(f, "sarq", rm64, Size::Quadword)
     }
 
-    pub fn shlb_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shlb_m1<R>) -> fmt::Result {
+    pub fn shlb_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shlb_m1<R>,
+    ) -> fmt::Result {
         let inst::shlb_m1 { rm8 } = inst;
         shift_m1::<R>(f, "shlb", rm8, Size::Byte)
     }
 
-    pub fn shlw_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shlw_m1<R>) -> fmt::Result {
+    pub fn shlw_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shlw_m1<R>,
+    ) -> fmt::Result {
         let inst::shlw_m1 { rm16 } = inst;
         shift_m1::<R>(f, "shlw", rm16, Size::Word)
     }
 
-    pub fn shll_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shll_m1<R>) -> fmt::Result {
+    pub fn shll_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shll_m1<R>,
+    ) -> fmt::Result {
         let inst::shll_m1 { rm32 } = inst;
         shift_m1::<R>(f, "shll", rm32, Size::Doubleword)
     }
 
-    pub fn shlq_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shlq_m1<R>) -> fmt::Result {
+    pub fn shlq_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shlq_m1<R>,
+    ) -> fmt::Result {
         let inst::shlq_m1 { rm64 } = inst;
         shift_m1::<R>(f, "shlq", rm64, Size::Quadword)
     }
 
-    pub fn shrb_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shrb_m1<R>) -> fmt::Result {
+    pub fn shrb_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shrb_m1<R>,
+    ) -> fmt::Result {
         let inst::shrb_m1 { rm8 } = inst;
         shift_m1::<R>(f, "shrb", rm8, Size::Byte)
     }
 
-    pub fn shrw_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shrw_m1<R>) -> fmt::Result {
+    pub fn shrw_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shrw_m1<R>,
+    ) -> fmt::Result {
         let inst::shrw_m1 { rm16 } = inst;
         shift_m1::<R>(f, "shrw", rm16, Size::Word)
     }
 
-    pub fn shrl_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shrl_m1<R>) -> fmt::Result {
+    pub fn shrl_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shrl_m1<R>,
+    ) -> fmt::Result {
         let inst::shrl_m1 { rm32 } = inst;
         shift_m1::<R>(f, "shrl", rm32, Size::Doubleword)
     }
 
-    pub fn shrq_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::shrq_m1<R>) -> fmt::Result {
+    pub fn shrq_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::shrq_m1<R>,
+    ) -> fmt::Result {
         let inst::shrq_m1 { rm64 } = inst;
         shift_m1::<R>(f, "shrq", rm64, Size::Quadword)
     }
 
-    pub fn rorb_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::rorb_m1<R>) -> fmt::Result {
+    pub fn rorb_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::rorb_m1<R>,
+    ) -> fmt::Result {
         let inst::rorb_m1 { rm8 } = inst;
         shift_m1::<R>(f, "rorb", rm8, Size::Byte)
     }
 
-    pub fn rorw_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::rorw_m1<R>) -> fmt::Result {
+    pub fn rorw_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::rorw_m1<R>,
+    ) -> fmt::Result {
         let inst::rorw_m1 { rm16 } = inst;
         shift_m1::<R>(f, "rorw", rm16, Size::Word)
     }
 
-    pub fn rorl_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::rorl_m1<R>) -> fmt::Result {
+    pub fn rorl_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::rorl_m1<R>,
+    ) -> fmt::Result {
         let inst::rorl_m1 { rm32 } = inst;
         shift_m1::<R>(f, "rorl", rm32, Size::Doubleword)
     }
 
-    pub fn rorq_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::rorq_m1<R>) -> fmt::Result {
+    pub fn rorq_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::rorq_m1<R>,
+    ) -> fmt::Result {
         let inst::rorq_m1 { rm64 } = inst;
         shift_m1::<R>(f, "rorq", rm64, Size::Quadword)
     }
 
-    pub fn rolb_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::rolb_m1<R>) -> fmt::Result {
+    pub fn rolb_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::rolb_m1<R>,
+    ) -> fmt::Result {
         let inst::rolb_m1 { rm8 } = inst;
         shift_m1::<R>(f, "rolb", rm8, Size::Byte)
     }
 
-    pub fn rolw_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::rolw_m1<R>) -> fmt::Result {
+    pub fn rolw_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::rolw_m1<R>,
+    ) -> fmt::Result {
         let inst::rolw_m1 { rm16 } = inst;
         shift_m1::<R>(f, "rolw", rm16, Size::Word)
     }
 
-    pub fn roll_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::roll_m1<R>) -> fmt::Result {
+    pub fn roll_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::roll_m1<R>,
+    ) -> fmt::Result {
         let inst::roll_m1 { rm32 } = inst;
         shift_m1::<R>(f, "roll", rm32, Size::Doubleword)
     }
 
-    pub fn rolq_m1<R: Registers>(f: &mut fmt::Formatter, inst: &inst::rolq_m1<R>) -> fmt::Result {
+    pub fn rolq_m1<R: Registers>(
+        f: &mut fmt::Formatter<'_>,
+        inst: &inst::rolq_m1<R>,
+    ) -> fmt::Result {
         let inst::rolq_m1 { rm64 } = inst;
         shift_m1::<R>(f, "rolq", rm64, Size::Quadword)
     }

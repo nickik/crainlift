@@ -93,7 +93,7 @@ fn gen_enum_all(name: &str, values: &[&'static str], fmt: &mut Formatter) {
 fn gen_to_and_from_str(name: &str, values: &[&'static str], fmt: &mut Formatter) {
     fmt.add_block(&format!("impl fmt::Display for {name}"), |fmt| {
         fmt.add_block(
-            "fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result",
+            "fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result",
             |fmt| {
                 fmt.add_block("f.write_str(match *self", |fmt| {
                     for v in values.iter() {
@@ -364,7 +364,7 @@ fn gen_template(group: &SettingGroup, fmt: &mut Formatter) {
 fn gen_display(group: &SettingGroup, fmt: &mut Formatter) {
     fmt.add_block("impl fmt::Display for Flags", |fmt| {
         fmt.add_block(
-            "fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result",
+            "fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result",
             |fmt| {
                 fmtln!(fmt, "writeln!(f, \"[{}]\")?;", group.name);
                 fmt.add_block("for d in &DESCRIPTORS", |fmt| {

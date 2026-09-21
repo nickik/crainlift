@@ -137,10 +137,7 @@ const ECLASS_ENODE_LIMIT: usize = 5;
 pub(crate) const EXTRACTOR_FUEL: u32 = 500;
 
 /// Context passed through node insertion and optimization.
-pub(crate) struct OptimizeCtx<'opt, 'analysis>
-where
-    'analysis: 'opt,
-{
+pub(crate) struct OptimizeCtx<'opt, 'analysis> {
     // Borrowed from EgraphPass:
     pub(crate) func: &'opt mut Function,
     pub(crate) value_to_opt_value: &'opt mut SecondaryMap<Value, Value>,
