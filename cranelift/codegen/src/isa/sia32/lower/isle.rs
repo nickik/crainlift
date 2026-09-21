@@ -271,8 +271,8 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         MInst::Cpop { dst, src }
     }
 
-    fn sia_icmp(&mut self, dst: WritableReg, cc: IntCC, lhs: Reg, rhs: Reg) -> MInst {
-        MInst::Icmp { dst, cc, lhs, rhs }
+    fn sia_icmp(&mut self, dst: WritableReg, cc: &IntCC, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::Icmp { dst, cc: *cc, lhs, rhs }
     }
 
     fn sia_extend(
