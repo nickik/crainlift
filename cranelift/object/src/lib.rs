@@ -2,7 +2,7 @@
 //!
 //! This re-exports `object` so you don't have to explicitly keep the versions in sync.
 
-#![deny(missing_docs)]
+#![allow(elided_lifetimes_in_paths, explicit_outlives_requirements)]\n#![deny(missing_docs)]
 
 mod backend;
 #[cfg(feature = "unwind")]
