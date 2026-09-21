@@ -1,6 +1,6 @@
 //! Top-level lib.rs for `cranelift_module`.
 
-#![deny(missing_docs)]
+#![allow(elided_lifetimes_in_paths, explicit_outlives_requirements)]\n#![deny(missing_docs)]
 #![no_std]
 
 #[cfg(not(feature = "std"))]
