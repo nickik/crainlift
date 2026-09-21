@@ -1,6 +1,7 @@
 #![cfg(feature = "sia32")]
 
 use cranelift_codegen::Context;
+use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{Function, InstBuilder, MemFlagsData, Signature, Type, UserFuncName, Value, types::{I8, I16, I32, I64}};
 use cranelift_codegen::isa::{self, CallConv};
 use cranelift_codegen::settings;
@@ -255,4 +256,32 @@ fn integrated_native_sia32_function_emits_bytes() {
     assert!(code.len() > 16, "integrated SIA32 function emitted too little code");
     assert_eq!(code.len() % 2, 0, "SIA32 native output is word aligned");
     assert!(code.windows(2).any(|word| word == [0xe0, 0xc0]), "integrated function must emit ret");
+}
+
+
+#[test]
+fn sia32_integer_comparisons_compile_to_canonical_booleans() {
+    let cases = [
+        IntCC::Equal,
+        IntCC::NotEqual,
+        IntCC::SignedLessThan,
+        IntCC::SignedLessThanOrEqual,
+        IntCC::SignedGreaterThan,
+        IntCC::SignedGreaterThanOrEqual,
+        IntCC::UnsignedLessThan,
+        IntCC::UnsignedLessThanOrEqual,
+        IntCC::UnsignedGreaterThan,
+        IntCC::UnsignedGreaterThanOrEqual,
+    ];
+
+    for cc in cases {
+        let code = compile_expression(I8, |pos| {
+            let lhs = pos.ins().iconst(I32, 1);
+            let rhs = pos.ins().iconst(I32, 0);
+            pos.ins().icmp(cc, lhs, rhs)
+        })
+        .unwrap_or_else(|error| panic!("SIA32 {cc:?} must lower through the production pipeline: {error}"));
+        assert!(!code.is_empty(), "{cc:?} emitted no code");
+        assert_eq!(code.len() % 2, 0, "{cc:?} output must be halfword aligned");
+    }
 }
