@@ -260,13 +260,28 @@ fn integrated_native_sia32_function_emits_bytes() {
 
 
 #[test]
-fn sia32_icmp_ne_compiles_to_canonical_boolean() {
-    let code = compile_expression(I8, |pos| {
-        let lhs = pos.ins().iconst(I32, 1);
-        let rhs = pos.ins().iconst(I32, 0);
-        pos.ins().icmp(IntCC::NotEqual, lhs, rhs)
-    })
-    .expect("SIA32 icmp.ne must lower through the production pipeline");
-    assert!(!code.is_empty());
-    assert_eq!(code.len() % 2, 0);
+fn sia32_integer_comparisons_compile_to_canonical_booleans() {
+    let cases = [
+        IntCC::Equal,
+        IntCC::NotEqual,
+        IntCC::SignedLessThan,
+        IntCC::SignedLessThanOrEqual,
+        IntCC::SignedGreaterThan,
+        IntCC::SignedGreaterThanOrEqual,
+        IntCC::UnsignedLessThan,
+        IntCC::UnsignedLessThanOrEqual,
+        IntCC::UnsignedGreaterThan,
+        IntCC::UnsignedGreaterThanOrEqual,
+    ];
+
+    for cc in cases {
+        let code = compile_expression(I8, |pos| {
+            let lhs = pos.ins().iconst(I32, 1);
+            let rhs = pos.ins().iconst(I32, 0);
+            pos.ins().icmp(cc, lhs, rhs)
+        })
+        .unwrap_or_else(|error| panic!("SIA32 {cc:?} must lower through the production pipeline: {error}"));
+        assert!(!code.is_empty(), "{cc:?} emitted no code");
+        assert_eq!(code.len() % 2, 0, "{cc:?} output must be halfword aligned");
+    }
 }
