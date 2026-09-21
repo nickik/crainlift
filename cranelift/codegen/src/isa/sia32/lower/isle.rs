@@ -325,6 +325,39 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         regs.regs()[0]
     }
 
+    fn sia_iconst_i64(&mut self, value: u64) -> InstOutput {
+        let dst = self.lower_ctx.alloc_tmp(I64);
+        let regs = dst.regs();
+        debug_assert_eq!(regs.len(), 2);
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: regs[0],
+            value: value as u32,
+        });
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: regs[1],
+            value: (value >> 32) as u32,
+        });
+        let mut out = InstOutput::new();
+        out.push(crate::machinst::ValueRegs::two(regs[0].to_reg(), regs[1].to_reg()));
+        out
+    }
+
+    fn sia_uextend_i32_i64(&mut self, value: Value) -> InstOutput {
+        let src = self.lower_ctx.put_value_in_regs(value);
+        let src = src.only_reg().expect("SIA32 i32 input must be scalar");
+        let dst = self.lower_ctx.alloc_tmp(I64);
+        let regs = dst.regs();
+        debug_assert_eq!(regs.len(), 2);
+        self.lower_ctx.emit(MachineInst::Mov { dst: regs[0], src });
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: regs[1],
+            value: 0,
+        });
+        let mut out = InstOutput::new();
+        out.push(crate::machinst::ValueRegs::two(regs[0].to_reg(), regs[1].to_reg()));
+        out
+    }
+
     fn sia_extend(
         &mut self,
         dst: WritableReg,
