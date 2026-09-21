@@ -372,8 +372,16 @@ pub(crate) fn lower(
     backend: &Sia32Backend,
     inst: Inst,
 ) -> Option<InstOutput> {
+    let opcode = lower_ctx.dfg().insts[inst].opcode();
     let mut isle_ctx = Sia32IsleContext::new(lower_ctx, backend);
-    generated_code::constructor_lower(&mut isle_ctx, inst)
+    let lowered = generated_code::constructor_lower(&mut isle_ctx, inst);
+
+    debug_assert!(
+        lowered.is_some() || !matches!(opcode, Opcode::Ireduce),
+        "SIA32 ireduce lowering unexpectedly returned None for {inst:?}"
+    );
+
+    lowered
 }
 
 pub(crate) fn lower_branch(
