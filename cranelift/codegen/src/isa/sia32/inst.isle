@@ -8,6 +8,7 @@
 ;; StackAMode itself is a small copyable ABI descriptor from MachInst and is
 ;; legitimately opaque to the SIA selection rules.
 (type StackAMode (primitive StackAMode))
+(type BoxCallInfo (primitive BoxCallInfo))
 
 (type MInst
   (enum
@@ -84,7 +85,9 @@
     (BrNz
       (test Reg)
       (taken MachLabel)
-      (not_taken MachLabel))))
+      (not_taken MachLabel))
+    (Call
+      (info BoxCallInfo))))
 
 (decl sia_load_const (WritableReg u64) MInst)
 (extern constructor sia_load_const sia_load_const)
@@ -125,3 +128,13 @@
 (extern constructor sia_jump sia_jump)
 (decl sia_brnz (Reg MachLabel MachLabel) MInst)
 (extern constructor sia_brnz sia_brnz)
+
+
+;;;; Calls ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(decl gen_call_info (Sig ExternalName CallArgList CallRetList OptionTryCallInfo bool) BoxCallInfo)
+(extern constructor gen_call_info gen_call_info)
+
+(decl sia_call (BoxCallInfo) SideEffectNoResult)
+(rule (sia_call info)
+      (SideEffectNoResult.Inst (MInst.Call info)))
