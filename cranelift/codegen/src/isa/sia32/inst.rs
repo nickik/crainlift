@@ -582,6 +582,7 @@ impl Inst {
     pub(crate) fn encoded_worst_case_size(&self) -> u32 {
         match self {
             Self::TwoOp { .. } | Self::ShiftImm { .. } | Self::Addi7 { .. } => 4,
+            Self::Icmp { .. } => 8,
             Self::LoadConst32 { .. } => 18,
             Self::BrNz { .. } => 4,
             Self::Extend { .. } => 6,
@@ -955,10 +956,8 @@ impl MachInstEmit for Inst {
                     IntCC::Equal => put_word(code, encode::cmpeq(d, r)),
                     IntCC::NotEqual => {
                         put_word(code, encode::cmpeq(d, r));
-                        put_word(
-                            code,
-                            encode::xori(d, 1).expect("canonical boolean inversion"),
-                        );
+                        put_word(code, encode::li(crate::isa::sia32::regs::Reg::SCRATCH, 1).expect("one fits LI"));
+                        put_word(code, encode::xor(d, crate::isa::sia32::regs::Reg::SCRATCH));
                     }
                     IntCC::SignedLessThan => put_word(code, encode::cmplt(d, r)),
                     IntCC::UnsignedLessThan => put_word(code, encode::cmpltu(d, r)),
@@ -979,34 +978,26 @@ impl MachInstEmit for Inst {
                             put_word(code, encode::mov(d, r));
                         }
                         put_word(code, encode::cmplt(d, l));
-                        put_word(
-                            code,
-                            encode::xori(d, 1).expect("canonical boolean inversion"),
-                        );
+                        put_word(code, encode::li(crate::isa::sia32::regs::Reg::SCRATCH, 1).expect("one fits LI"));
+                        put_word(code, encode::xor(d, crate::isa::sia32::regs::Reg::SCRATCH));
                     }
                     IntCC::UnsignedLessThanOrEqual => {
                         if d != r {
                             put_word(code, encode::mov(d, r));
                         }
                         put_word(code, encode::cmpltu(d, l));
-                        put_word(
-                            code,
-                            encode::xori(d, 1).expect("canonical boolean inversion"),
-                        );
+                        put_word(code, encode::li(crate::isa::sia32::regs::Reg::SCRATCH, 1).expect("one fits LI"));
+                        put_word(code, encode::xor(d, crate::isa::sia32::regs::Reg::SCRATCH));
                     }
                     IntCC::SignedGreaterThanOrEqual => {
                         put_word(code, encode::cmplt(d, r));
-                        put_word(
-                            code,
-                            encode::xori(d, 1).expect("canonical boolean inversion"),
-                        );
+                        put_word(code, encode::li(crate::isa::sia32::regs::Reg::SCRATCH, 1).expect("one fits LI"));
+                        put_word(code, encode::xor(d, crate::isa::sia32::regs::Reg::SCRATCH));
                     }
                     IntCC::UnsignedGreaterThanOrEqual => {
                         put_word(code, encode::cmpltu(d, r));
-                        put_word(
-                            code,
-                            encode::xori(d, 1).expect("canonical boolean inversion"),
-                        );
+                        put_word(code, encode::li(crate::isa::sia32::regs::Reg::SCRATCH, 1).expect("one fits LI"));
+                        put_word(code, encode::xor(d, crate::isa::sia32::regs::Reg::SCRATCH));
                     }
                 }
             }
