@@ -1,5 +1,5 @@
 //! Cranelift code generation library.
-#![allow(elided_lifetimes_in_paths, explicit_outlives_requirements)]\n#![deny(missing_docs)]
+#![allow(\n    elided_lifetimes_in_paths,\n    explicit_outlives_requirements,\n    unfulfilled_lint_expectations\n)]\n#![deny(missing_docs)]
 // Display feature requirements in the documentation when building on docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![no_std]
