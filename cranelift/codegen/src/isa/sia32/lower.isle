@@ -18,8 +18,14 @@
 (rule (lower (iconst $I64 (u64_from_imm64 n)))
       (sia_iconst_i64 n))
 
-(rule (lower (iconst (fits_in_32 (ty_int ty)) (u64_from_imm64 n)))
-      (let ((dst WritableReg (temp_writable_reg ty)))
+(rule (lower (iconst $I8 (u64_from_imm64 n)))
+      (let ((dst WritableReg (temp_writable_reg $I8)))
+        (sia_emit_result (sia_load_const dst n) dst)))
+(rule (lower (iconst $I16 (u64_from_imm64 n)))
+      (let ((dst WritableReg (temp_writable_reg $I16)))
+        (sia_emit_result (sia_load_const dst n) dst)))
+(rule (lower (iconst $I32 (u64_from_imm64 n)))
+      (let ((dst WritableReg (temp_writable_reg $I32)))
         (sia_emit_result (sia_load_const dst n) dst)))
 
 ;;;; Integer ALU ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
