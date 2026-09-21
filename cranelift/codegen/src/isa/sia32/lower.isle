@@ -138,6 +138,19 @@
       (let ((test Reg (put_in_reg cond)))
         (emit_side_effect (SideEffectNoResult.Inst (sia_brnz test taken not_taken)))))
 
+;;;; Calls ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; SIA32 direct calls always use the backend's literal-pool target sequence, so
+;; the CLIF near/far relocation hint does not change the selected instruction.
+(rule (lower (call (func_ref_data sig_ref name _ patchable) args))
+      (let ((output ValueRegsVec (gen_call_output sig_ref))
+            (abi Sig (abi_sig sig_ref))
+            (uses CallArgList (gen_call_args abi args))
+            (defs CallRetList (gen_call_rets abi output))
+            (info BoxCallInfo (gen_call_info abi name uses defs (try_call_none) patchable))
+            (_ Unit (emit_side_effect (sia_call info))))
+        output))
+
 ;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Keep the abstract StackSlot until frame layout is finalized. The shared ABI
