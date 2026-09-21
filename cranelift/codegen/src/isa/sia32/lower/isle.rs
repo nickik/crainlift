@@ -249,6 +249,18 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         MInst::Add { dst, lhs, rhs }
     }
 
+    fn sia_cmpeq(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::CmpEq { dst, lhs, rhs }
+    }
+
+    fn sia_cmplt(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::CmpLt { dst, lhs, rhs }
+    }
+
+    fn sia_cmpltu(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
+        MInst::CmpLtu { dst, lhs, rhs }
+    }
+
     fn sia_sub(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
         MInst::Sub { dst, lhs, rhs }
     }
