@@ -224,6 +224,25 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
 impl generated_code::Context for Sia32IsleContext<'_, '_> {
     isle_lower_prelude_methods!();
 
+    fn temp_writable_reg(&mut self, ty: Type) -> WritableReg {
+        let regs = self.lower_ctx.alloc_tmp(ty);
+        regs.only_reg().unwrap_or_else(|| {
+            panic!(
+                "SIA32 scalar temp requested for multi-register type {ty}: regs={regs:?}"
+            )
+        })
+    }
+
+    fn put_in_reg(&mut self, val: Value) -> Reg {
+        let ty = self.lower_ctx.dfg().value_type(val);
+        let regs = self.lower_ctx.put_value_in_regs(val);
+        regs.only_reg().unwrap_or_else(|| {
+            panic!(
+                "SIA32 scalar register requested for multi-register value {val:?} type={ty}: regs={regs:?}"
+            )
+        })
+    }
+
     fn emit(&mut self, inst: &MInst) -> Unit {
         self.lower_ctx.emit(into_machine_inst(inst));
     }
