@@ -15,6 +15,9 @@
 
 ;;;; Constants ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(rule (lower (iconst $I64 (u64_from_imm64 n)))
+      (sia_iconst_i64 n))
+
 (rule (lower (iconst (fits_in_32 (ty_int ty)) (u64_from_imm64 n)))
       (let ((dst WritableReg (temp_writable_reg ty)))
         (sia_emit_result (sia_load_const dst n) dst)))
@@ -103,6 +106,9 @@
       (sia_extend_result x true 8))
 (rule (lower (sextend $I32 x @ (value_type $I16)))
       (sia_extend_result x true 16))
+
+(rule (lower (uextend $I64 x @ (value_type $I32)))
+      (sia_uextend_i32_i64 x))
 
 ;; Reduction needs no machine instruction: the destination observes the low
 ;; bits of the same 32-bit register representation.
