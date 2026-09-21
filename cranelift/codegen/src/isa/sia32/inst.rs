@@ -582,7 +582,7 @@ impl Inst {
     pub(crate) fn encoded_worst_case_size(&self) -> u32 {
         match self {
             Self::TwoOp { .. } | Self::ShiftImm { .. } | Self::Addi7 { .. } => 4,
-            Self::Icmp { .. } => 8,
+            Self::Icmp { .. } => 10,
             Self::LoadConst32 { .. } => 18,
             Self::BrNz { .. } => 4,
             Self::Extend { .. } => 6,
@@ -962,30 +962,38 @@ impl MachInstEmit for Inst {
                     IntCC::SignedLessThan => put_word(code, encode::cmplt(d, r)),
                     IntCC::UnsignedLessThan => put_word(code, encode::cmpltu(d, r)),
                     IntCC::SignedGreaterThan => {
-                        if d != r {
-                            put_word(code, encode::mov(d, r));
-                        }
-                        put_word(code, encode::cmplt(d, l));
+                        let lhs = if d == l && d != r {
+                            put_word(code, encode::mov(crate::isa::sia32::regs::Reg::SCRATCH, l));
+                            crate::isa::sia32::regs::Reg::SCRATCH
+                        } else { l };
+                        if d != r { put_word(code, encode::mov(d, r)); }
+                        put_word(code, encode::cmplt(d, lhs));
                     }
                     IntCC::UnsignedGreaterThan => {
-                        if d != r {
-                            put_word(code, encode::mov(d, r));
-                        }
-                        put_word(code, encode::cmpltu(d, l));
+                        let lhs = if d == l && d != r {
+                            put_word(code, encode::mov(crate::isa::sia32::regs::Reg::SCRATCH, l));
+                            crate::isa::sia32::regs::Reg::SCRATCH
+                        } else { l };
+                        if d != r { put_word(code, encode::mov(d, r)); }
+                        put_word(code, encode::cmpltu(d, lhs));
                     }
                     IntCC::SignedLessThanOrEqual => {
-                        if d != r {
-                            put_word(code, encode::mov(d, r));
-                        }
-                        put_word(code, encode::cmplt(d, l));
+                        let lhs = if d == l && d != r {
+                            put_word(code, encode::mov(crate::isa::sia32::regs::Reg::SCRATCH, l));
+                            crate::isa::sia32::regs::Reg::SCRATCH
+                        } else { l };
+                        if d != r { put_word(code, encode::mov(d, r)); }
+                        put_word(code, encode::cmplt(d, lhs));
                         put_word(code, encode::li(crate::isa::sia32::regs::Reg::SCRATCH, 1).expect("one fits LI"));
                         put_word(code, encode::xor(d, crate::isa::sia32::regs::Reg::SCRATCH));
                     }
                     IntCC::UnsignedLessThanOrEqual => {
-                        if d != r {
-                            put_word(code, encode::mov(d, r));
-                        }
-                        put_word(code, encode::cmpltu(d, l));
+                        let lhs = if d == l && d != r {
+                            put_word(code, encode::mov(crate::isa::sia32::regs::Reg::SCRATCH, l));
+                            crate::isa::sia32::regs::Reg::SCRATCH
+                        } else { l };
+                        if d != r { put_word(code, encode::mov(d, r)); }
+                        put_word(code, encode::cmpltu(d, lhs));
                         put_word(code, encode::li(crate::isa::sia32::regs::Reg::SCRATCH, 1).expect("one fits LI"));
                         put_word(code, encode::xor(d, crate::isa::sia32::regs::Reg::SCRATCH));
                     }
