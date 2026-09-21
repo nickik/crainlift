@@ -22,6 +22,10 @@
     (LoadConst32
       (dst WritableReg)
       (value u32))
+    (LoadExtName
+      (dst WritableReg)
+      (name BoxExternalName)
+      (offset i64))
     (Add
       (dst WritableReg)
       (lhs Reg)
@@ -122,6 +126,8 @@
 (extern constructor gen_stack_addr gen_stack_addr)
 (decl sia_load_const (WritableReg u64) MInst)
 (extern constructor sia_load_const sia_load_const)
+(decl sia_load_ext_name (WritableReg BoxExternalName i64) MInst)
+(extern constructor sia_load_ext_name sia_load_ext_name)
 (decl sia_add (WritableReg Reg Reg) MInst)
 (decl sia_cmpeq (WritableReg Reg Reg) MInst)
 (extern constructor sia_cmpeq sia_cmpeq)

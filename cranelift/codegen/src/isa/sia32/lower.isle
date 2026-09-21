@@ -19,6 +19,12 @@
       (let ((dst WritableReg (temp_writable_reg ty)))
         (sia_emit_result (sia_load_const dst n) dst)))
 
+;;;; Symbol addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule (lower (symbol_value $I32 (symbol_value_data name _ offset)))
+      (let ((dst WritableReg (temp_writable_reg $I32)))
+        (sia_emit_result (sia_load_ext_name dst (box_external_name name) offset) dst)))
+
 ;;;; Integer ALU ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (rule (lower (iadd (fits_in_32 (ty_int ty)) x y))
