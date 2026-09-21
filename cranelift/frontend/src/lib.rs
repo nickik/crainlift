@@ -187,23 +187,7 @@ macro_rules! assert_eq_output {
         assert_eq!(
             left,
             right,
-            "assertion failed, output not equal:
-\
-             
-\
-             =========== Diff ===========
-\
-             {}
-\
-             =========== Left ===========
-\
-             {left}
-\
-             =========== Right ===========
-\
-             {right}
-\
-             ",
+            "assertion failed, output not equal:\n\n=========== Diff ===========\n{}\n=========== Left ===========\n{left}\n=========== Right ===========\n{right}\n",
             similar::TextDiff::from_lines(left, right)
                 .unified_diff()
                 .header("left", "right")
