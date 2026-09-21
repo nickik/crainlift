@@ -13,7 +13,8 @@
 //! - Empty trees have a very small 32-bit footprint.
 //! - All the trees in a forest can be cleared in constant time.
 
-#![allow(elided_lifetimes_in_paths, explicit_outlives_requirements)]\n#![deny(missing_docs)]
+#![allow(elided_lifetimes_in_paths, explicit_outlives_requirements)]
+#![deny(missing_docs)]
 #![no_std]
 
 #[cfg(test)]
