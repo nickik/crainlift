@@ -8,6 +8,7 @@ use super::abi::Sia32MachineDeps;
 use super::label::LabelUse;
 use super::{encode, regs};
 use crate::binemit::{CodeOffset, Reloc};
+use crate::ir::condcodes::IntCC;
 use crate::ir::types::{I8, I16, I32, I64};
 use crate::ir::{self, ExternalName, Type};
 use crate::isa::FunctionAlignment;
@@ -135,6 +136,12 @@ pub(crate) enum Inst {
     TwoOp {
         op: TwoOp,
         dst: Writable<Reg>,
+        lhs: Reg,
+        rhs: Reg,
+    },
+    Icmp {
+        dst: Writable<Reg>,
+        cc: IntCC,
         lhs: Reg,
         rhs: Reg,
     },
@@ -639,7 +646,9 @@ impl MachInst for Inst {
                 collector.reg_use(src);
                 collector.reg_def(dst);
             }
-            Self::Add { dst, lhs, rhs } | Self::TwoOp { dst, lhs, rhs, .. } => {
+            Self::Add { dst, lhs, rhs }
+            | Self::TwoOp { dst, lhs, rhs, .. }
+            | Self::Icmp { dst, lhs, rhs, .. } => {
                 collector.reg_use(lhs);
                 collector.reg_use(rhs);
                 collector.reg_def(dst);
@@ -934,6 +943,72 @@ impl MachInstEmit for Inst {
                     TwoOp::Rev8 => encode::rev8(d, r),
                 };
                 put_word(code, word);
+            }
+            Self::Icmp { dst, cc, lhs, rhs } => {
+                let d = arch_reg(dst.to_reg());
+                let l = arch_reg(*lhs);
+                let r = arch_reg(*rhs);
+                if d != l {
+                    put_word(code, encode::mov(d, l));
+                }
+                match cc {
+                    IntCC::Equal => put_word(code, encode::cmpeq(d, r)),
+                    IntCC::NotEqual => {
+                        put_word(code, encode::cmpeq(d, r));
+                        put_word(
+                            code,
+                            encode::xori(d, 1).expect("canonical boolean inversion"),
+                        );
+                    }
+                    IntCC::SignedLessThan => put_word(code, encode::cmplt(d, r)),
+                    IntCC::UnsignedLessThan => put_word(code, encode::cmpltu(d, r)),
+                    IntCC::SignedGreaterThan => {
+                        if d != r {
+                            put_word(code, encode::mov(d, r));
+                        }
+                        put_word(code, encode::cmplt(d, l));
+                    }
+                    IntCC::UnsignedGreaterThan => {
+                        if d != r {
+                            put_word(code, encode::mov(d, r));
+                        }
+                        put_word(code, encode::cmpltu(d, l));
+                    }
+                    IntCC::SignedLessThanOrEqual => {
+                        if d != r {
+                            put_word(code, encode::mov(d, r));
+                        }
+                        put_word(code, encode::cmplt(d, l));
+                        put_word(
+                            code,
+                            encode::xori(d, 1).expect("canonical boolean inversion"),
+                        );
+                    }
+                    IntCC::UnsignedLessThanOrEqual => {
+                        if d != r {
+                            put_word(code, encode::mov(d, r));
+                        }
+                        put_word(code, encode::cmpltu(d, l));
+                        put_word(
+                            code,
+                            encode::xori(d, 1).expect("canonical boolean inversion"),
+                        );
+                    }
+                    IntCC::SignedGreaterThanOrEqual => {
+                        put_word(code, encode::cmplt(d, r));
+                        put_word(
+                            code,
+                            encode::xori(d, 1).expect("canonical boolean inversion"),
+                        );
+                    }
+                    IntCC::UnsignedGreaterThanOrEqual => {
+                        put_word(code, encode::cmpltu(d, r));
+                        put_word(
+                            code,
+                            encode::xori(d, 1).expect("canonical boolean inversion"),
+                        );
+                    }
+                }
             }
             Self::ShiftImm {
                 op,
