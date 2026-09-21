@@ -128,6 +128,11 @@ pub(crate) enum Inst {
         dst: Writable<Reg>,
         value: u32,
     },
+    LoadExtName {
+        dst: Writable<Reg>,
+        name: ExternalName,
+        offset: i64,
+    },
     Load {
         op: LoadOp,
         dst: Writable<Reg>,
@@ -494,6 +499,7 @@ impl Inst {
         match self {
             Self::TwoOp { .. } | Self::ShiftImm { .. } | Self::Addi7 { .. } => 4,
             Self::LoadConst32 { .. } => 18,
+            Self::LoadExtName { .. } => 12,
             Self::BrNz { .. } => 4,
             Self::Extend { .. } => 6,
             Self::AddImm { .. } | Self::SpAdjust { .. } | Self::StackAddr { .. } => 22,
@@ -544,7 +550,10 @@ impl MachInst for Inst {
                 collector.reg_use(src);
                 collector.reg_def(dst);
             }
-            Self::Li7 { dst, .. } | Self::LoadConst32 { dst, .. } | Self::StackAddr { dst, .. } => {
+            Self::Li7 { dst, .. }
+            | Self::LoadConst32 { dst, .. }
+            | Self::LoadExtName { dst, .. }
+            | Self::StackAddr { dst, .. } => {
                 collector.reg_def(dst)
             }
             Self::Load { dst, base, .. } | Self::LoadBaseOffset { dst, base, .. } => {
@@ -801,6 +810,25 @@ impl MachInstEmit for Inst {
                 } else {
                     emit_literal32(code, state, arch_reg(dst.to_reg()), *value);
                 }
+            }
+            Self::LoadExtName { dst, name, offset } => {
+                let literal = code.get_label();
+                let done = code.get_label();
+
+                let load_at = code.cur_offset();
+                code.use_label_at_offset(load_at, literal, LabelUse::Literal8);
+                put_word(code, encode::ldpc_w(arch_reg(dst.to_reg()), 0).unwrap());
+
+                let branch_at = code.cur_offset();
+                code.use_label_at_offset(branch_at, done, LabelUse::Branch11);
+                code.add_uncond_branch(branch_at, branch_at + 2, done);
+                put_word(code, encode::b(0).unwrap());
+
+                code.align_to(4);
+                code.bind_label(literal, state.ctrl_plane_mut());
+                code.add_reloc(Reloc::Abs4, name, *offset);
+                code.put4(0);
+                code.bind_label(done, state.ctrl_plane_mut());
             }
             Self::Load { op, dst, base } => {
                 emit_load_zero_offset(code, *op, arch_reg(dst.to_reg()), arch_reg(*base))
