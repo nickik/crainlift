@@ -218,7 +218,7 @@ impl<'a> SettingOrPreset<'a> {
 fn gen_descriptors(group: &SettingGroup, fmt: &mut Formatter) {
     let mut enum_table = UniqueSeqTable::new();
 
-    let mut descriptor_index_map: HashMap<SettingOrPreset, usize> = HashMap::new();
+    let mut descriptor_index_map: HashMap<SettingOrPreset<'_>, usize> = HashMap::new();
 
     // Generate descriptors.
     fmtln!(
@@ -284,7 +284,7 @@ fn gen_descriptors(group: &SettingGroup, fmt: &mut Formatter) {
     fmtln!(fmt, "];");
 
     // Generate hash table.
-    let mut hash_entries: Vec<SettingOrPreset> = Vec::new();
+    let mut hash_entries: Vec<SettingOrPreset<'_>> = Vec::new();
     hash_entries.extend(group.settings.iter().map(SettingOrPreset::Setting));
     hash_entries.extend(group.presets.iter().map(SettingOrPreset::Preset));
 

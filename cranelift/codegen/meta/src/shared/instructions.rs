@@ -12,7 +12,7 @@ use crate::shared::{entities::EntityRefs, immediates::Immediates};
 
 #[inline(never)]
 fn define_control_flow(
-    ig: &mut InstructionGroupBuilder,
+    ig: &mut InstructionGroupBuilder<'_>,
     formats: &Formats,
     imm: &Immediates,
     entities: &EntityRefs,
@@ -374,7 +374,7 @@ fn define_control_flow(
 
 #[inline(never)]
 fn define_simd_lane_access(
-    ig: &mut InstructionGroupBuilder,
+    ig: &mut InstructionGroupBuilder<'_>,
     formats: &Formats,
     imm: &Immediates,
     _: &EntityRefs,
@@ -501,7 +501,7 @@ fn define_simd_lane_access(
 
 #[inline(never)]
 fn define_simd_arithmetic(
-    ig: &mut InstructionGroupBuilder,
+    ig: &mut InstructionGroupBuilder<'_>,
     formats: &Formats,
     _: &Immediates,
     _: &EntityRefs,
