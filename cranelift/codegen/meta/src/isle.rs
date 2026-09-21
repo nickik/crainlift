@@ -59,7 +59,10 @@ impl IsleCompilation {
         for entry in std::fs::read_dir(input).map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("failed to read ISLE input directory {}: {e}", input.display()),
+                format!(
+                    "failed to read ISLE input directory {}: {e}",
+                    input.display()
+                ),
             )
         })? {
             let path = entry?.path();
@@ -160,7 +163,10 @@ pub fn get_isle_compilations(
                 tracked_inputs: [
                     vec![prelude_isle.clone(), prelude_lower_isle.clone()],
                     lower_spec_inputs(&["fpconst.isle", "state.isle"]),
-                    vec![src_isa_x64.join("inst.isle"), src_isa_x64.join("lower.isle")],
+                    vec![
+                        src_isa_x64.join("inst.isle"),
+                        src_isa_x64.join("lower.isle"),
+                    ],
                 ]
                 .concat(),
                 untracked_inputs: vec![
@@ -198,7 +204,10 @@ pub fn get_isle_compilations(
                 tracked_inputs: [
                     vec![prelude_isle.clone(), prelude_lower_isle.clone()],
                     lower_spec_inputs(&[]),
-                    vec![src_isa_s390x.join("inst.isle"), src_isa_s390x.join("lower.isle")],
+                    vec![
+                        src_isa_s390x.join("inst.isle"),
+                        src_isa_s390x.join("lower.isle"),
+                    ],
                 ]
                 .concat(),
                 untracked_inputs: vec![numerics_isle.clone(), clif_lower_isle.clone()],
@@ -224,7 +233,10 @@ pub fn get_isle_compilations(
                 tracked_inputs: [
                     vec![prelude_isle.clone(), prelude_lower_isle.clone()],
                     lower_spec_inputs(&[]),
-                    vec![src_isa_sia32.join("inst.isle"), src_isa_sia32.join("lower.isle")],
+                    vec![
+                        src_isa_sia32.join("inst.isle"),
+                        src_isa_sia32.join("lower.isle"),
+                    ],
                 ]
                 .concat(),
                 untracked_inputs: vec![numerics_isle.clone(), clif_lower_isle.clone()],
@@ -239,11 +251,7 @@ pub fn get_isle_compilations(
                     src_isa_pulley_shared.join("inst.isle"),
                     src_isa_pulley_shared.join("lower.isle"),
                 ],
-                untracked_inputs: vec![
-                    numerics_isle,
-                    pulley_gen,
-                    clif_lower_isle,
-                ],
+                untracked_inputs: vec![numerics_isle, pulley_gen, clif_lower_isle],
             },
         ],
     }

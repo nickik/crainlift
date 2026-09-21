@@ -16,14 +16,14 @@ use alloc::string::ToString;
 use core::fmt;
 use core::str::FromStr;
 
-pub use target_lexicon_upstream::{
-    Aarch64Architecture, ArmArchitecture, BinaryFormat, CDataModel, CallingConvention,
-    CleverArchitecture, CustomVendor, DeploymentTarget, Endianness, Environment, Mips32Architecture,
-    Mips64Architecture, OperatingSystem, ParseError, PointerWidth, Riscv32Architecture,
-    Riscv64Architecture, Size, Vendor, X86_32Architecture,
-};
 #[cfg(feature = "arch_z80")]
 pub use target_lexicon_upstream::Z80Architecture;
+pub use target_lexicon_upstream::{
+    Aarch64Architecture, ArmArchitecture, BinaryFormat, CDataModel, CallingConvention,
+    CleverArchitecture, CustomVendor, DeploymentTarget, Endianness, Environment,
+    Mips32Architecture, Mips64Architecture, OperatingSystem, ParseError, PointerWidth,
+    Riscv32Architecture, Riscv64Architecture, Size, Vendor, X86_32Architecture,
+};
 
 /// Target architecture, extended with DEC SIA32.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -166,9 +166,10 @@ impl Architecture {
     }
 
     fn proxy_upstream(self) -> target_lexicon_upstream::Architecture {
-        self.to_upstream().unwrap_or(target_lexicon_upstream::Architecture::Riscv32(
-            Riscv32Architecture::Riscv32,
-        ))
+        self.to_upstream()
+            .unwrap_or(target_lexicon_upstream::Architecture::Riscv32(
+                Riscv32Architecture::Riscv32,
+            ))
     }
 
     /// Return architecture endianness.
@@ -332,14 +333,18 @@ impl fmt::Display for Triple {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DefaultToHost(pub Triple);
 impl Default for DefaultToHost {
-    fn default() -> Self { Self(Triple::host()) }
+    fn default() -> Self {
+        Self(Triple::host())
+    }
 }
 
 /// Wrapper whose default is an unknown triple.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DefaultToUnknown(pub Triple);
 impl Default for DefaultToUnknown {
-    fn default() -> Self { Self(Triple::unknown()) }
+    fn default() -> Self {
+        Self(Triple::unknown())
+    }
 }
 
 /// Convenient target-triple literal syntax.
@@ -377,7 +382,10 @@ mod tests {
         assert_eq!(t.architecture, Architecture::Sia32);
         assert_eq!(t.pointer_width(), Ok(PointerWidth::U32));
         assert_eq!(t.endianness(), Ok(Endianness::Little));
-        assert_eq!(t.default_calling_convention(), Ok(CallingConvention::SystemV));
+        assert_eq!(
+            t.default_calling_convention(),
+            Ok(CallingConvention::SystemV)
+        );
         assert_eq!(t.data_model(), Ok(CDataModel::ILP32));
         assert_eq!(t.to_string(), "sia32-unknown-none");
     }

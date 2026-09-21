@@ -2,17 +2,15 @@
 //! generic ABI implementation.
 
 use super::inst::{self, Inst};
+use crate::CodegenResult;
 use crate::ir::Type;
 use crate::machinst::{Reg, Writable};
-use crate::CodegenResult;
 use regalloc2::RegClass;
 
 impl Inst {
     /// Return the SIA32 register representation used by the ABI layer without
     /// requiring trait-method lookup at every call site.
-    pub(crate) fn rc_for_type(
-        ty: &Type,
-    ) -> CodegenResult<(&'static [RegClass], &'static [Type])> {
+    pub(crate) fn rc_for_type(ty: &Type) -> CodegenResult<(&'static [RegClass], &'static [Type])> {
         inst::rc_for_type(ty)
     }
 

@@ -12,7 +12,9 @@ fn sia32_target_lookup_reports_frozen_frontend_properties() {
     let triple: Triple = "sia32-unknown-none".parse().unwrap();
     let builder = isa::lookup(triple).expect("SIA32 backend must be registered");
     let shared = settings::Flags::new(settings::builder());
-    let target = builder.finish(shared).expect("SIA32 backend must construct");
+    let target = builder
+        .finish(shared)
+        .expect("SIA32 backend must construct");
 
     assert_eq!(target.name(), "sia32");
     assert_eq!(target.triple().pointer_width(), Ok(PointerWidth::U32));
