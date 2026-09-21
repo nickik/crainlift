@@ -23,6 +23,10 @@
     (LoadConst32
       (dst WritableReg)
       (value u32))
+    (LoadExtName
+      (dst WritableReg)
+      (name ExternalName)
+      (offset i64))
     (Add
       (dst WritableReg)
       (lhs Reg)
@@ -91,6 +95,8 @@
 
 (decl sia_load_const (WritableReg u64) MInst)
 (extern constructor sia_load_const sia_load_const)
+(decl sia_load_ext_name (WritableReg ExternalName i64) MInst)
+(extern constructor sia_load_ext_name sia_load_ext_name)
 
 (decl sia_add (WritableReg Reg Reg) MInst)
 (extern constructor sia_add sia_add)
