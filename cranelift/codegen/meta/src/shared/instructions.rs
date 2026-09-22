@@ -3418,6 +3418,16 @@ pub(crate) fn define(
         .other_side_effects(),
     );
 
+    ig.push(
+        Inst::new(
+            "stack_free_dynamic",
+            "Release size bytes from the current function's runtime stack allocation.",
+            &formats.unary,
+        )
+        .operands_in(&[Operand::new("size", i32_)])
+        .other_side_effects(),
+    );
+
     // Target-specific protected-machine escape hatch used by the SIA32
     // freestanding pipeline. Backends without SIA32 semantics reject these.
     ig.push(
