@@ -75,6 +75,14 @@ SIA32 facts that drive the design:
 - [ ] Implement backend register pretty-printing (`r0`..`r15`, with optional `sp/lr/fp` aliases in debug output).
 - [ ] Add compile-only tests that `isa::lookup(sia32 triple)` constructs the backend and frontend config reports 32-bit pointers.
 
+## Dynamic stack allocation / VLA support
+
+- [x] Permit compiler-generated `sia_gpr_read.i32 13` to snapshot architectural SP; `sia_gpr_write ..., 13` already restores/updates SP.
+- [x] Add production-pipeline regression proving SP read, runtime arithmetic, SP write and restoration lower together.
+- [ ] Add a dedicated non-privileged CLIF stack-allocation abstraction so frontends do not need to name r13 directly.
+- [ ] Make fixed stack-slot addressing stable while SP is dynamically displaced (frame-base strategy or equivalent).
+- [ ] Define scope/return restoration rules and call interaction before Cosmic C enables general VLA lowering.
+
 ## M2 — Register file, machine instruction model and exact encoder
 
 - [ ] Add `sia32/inst/regs.rs` with the physical integer register class.
