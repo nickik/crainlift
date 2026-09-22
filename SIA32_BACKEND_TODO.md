@@ -81,7 +81,7 @@ SIA32 facts that drive the design:
 - [x] Add production-pipeline regression proving SP read, runtime arithmetic, SP write and restoration lower together.
 - [x] Add a dedicated non-privileged `stack_alloc_dynamic(size) -> addr` CLIF operation and SIA32 lowering so language frontends do not name r13 directly.
 - [x] Reserve r15 as the stable SIA32 frame base, establish it after fixed-frame allocation, address `StackAMode` fixed slots through it, and restore SP from it before epilogue loads/deallocation. This isolates fixed frame objects from runtime SP displacement.
-- [ ] Define scope/return restoration rules and call interaction before Cosmic C enables general VLA lowering. Frame-base epilogue restoration now makes function return safe; next proof must cover a dynamic allocation followed by a direct/indirect call and subsequent fixed-slot access.
+- [x] Define function-return/call interaction for dynamic allocation: the stable frame base restores SP on return, and a production regression now covers fixed-slot access → dynamic allocation → direct call → fixed-slot access → return. Lexical-scope early deallocation is a frontend policy and is not required for correctness of function-lifetime VLAs.
 
 ## M2 — Register file, machine instruction model and exact encoder
 
