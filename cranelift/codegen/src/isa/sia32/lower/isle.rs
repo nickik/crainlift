@@ -86,6 +86,11 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             dst: *dst,
             value: *value,
         },
+        MInst::LoadExtName { dst, name, offset } => MachineInst::LoadExtName {
+            dst: *dst,
+            name: name.as_ref().clone(),
+            offset: *offset,
+        },
         MInst::Add { dst, lhs, rhs } => MachineInst::Add {
             dst: *dst,
             lhs: *lhs,
