@@ -668,9 +668,10 @@ impl MachInst for Inst {
                 collector.reg_use(src);
                 collector.reg_def(dst);
             }
-            Self::Li7 { dst, .. } | Self::LoadConst32 { dst, .. } | Self::StackAddr { dst, .. } => {
-                collector.reg_def(dst)
-            }
+            Self::Li7 { dst, .. }
+            | Self::LoadConst32 { dst, .. }
+            | Self::LoadExtName { dst, .. }
+            | Self::StackAddr { dst, .. } => collector.reg_def(dst),
             Self::Load { dst, base, .. } | Self::LoadBaseOffset { dst, base, .. } => {
                 collector.reg_use(base);
                 collector.reg_def(dst);
