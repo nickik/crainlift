@@ -4,7 +4,8 @@ use cranelift_codegen::Context;
 use cranelift_codegen::cursor::{Cursor, FuncCursor};
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
-    Function, InstBuilder, MemFlagsData, Signature, Type, UserFuncName, Value,
+    ExternalName, ExtFuncData, Function, InstBuilder, MemFlagsData, Signature, StackSlotData,
+    StackSlotKind, Type, UserExternalName, UserFuncName, Value,
     types::{I8, I16, I32, I64},
 };
 use cranelift_codegen::isa::{self, CallConv};
@@ -406,4 +407,41 @@ fn dynamic_stack_alloc_compiles_through_production_sia32_pipeline() {
     .expect("SIA32 dynamic stack allocation must lower through production pipeline");
     assert!(!code.is_empty());
     assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
+#[test]
+fn dynamic_stack_allocation_survives_call_and_fixed_slot_access() {
+    let mut sig = Signature::new(CallConv::SystemV);
+    sig.returns.push(cranelift_codegen::ir::AbiParam::new(I32));
+    let mut func = Function::with_name_signature(UserFuncName::testcase("dyn_call"), sig);
+    let slot = func
+        .sized_stack_slots
+        .push(StackSlotData::new(StackSlotKind::ExplicitSlot, 4, 2));
+    let callee_sig = func.import_signature(Signature::new(CallConv::SystemV));
+    let callee = func.import_function(ExtFuncData {
+        name: ExternalName::User(func.declare_imported_user_function(UserExternalName {
+            namespace: 0,
+            index: 1,
+        })),
+        signature: callee_sig,
+        colocated: false,
+    });
+    let block = func.dfg.make_block();
+    func.layout.append_block(block);
+    {
+        let mut pos = FuncCursor::new(&mut func);
+        pos.goto_bottom(block);
+        let fixed = pos.ins().stack_addr(I32, slot, 0);
+        let before = pos.ins().iconst(I32, 7);
+        pos.ins().store(MemFlagsData::new().into(), before, fixed, 0);
+        let size = pos.ins().iconst(I32, 32);
+        let _dynamic = pos.ins().stack_alloc_dynamic(I32, size);
+        pos.ins().call(callee, &[]);
+        let after = pos.ins().load(I32, MemFlagsData::new().into(), fixed, 0);
+        pos.ins().return_(&[after]);
+    }
+    let code = compile_function(func)
+        .expect("dynamic SP displacement must coexist with calls and fixed stack slots");
+    assert!(!code.is_empty());
+    assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
+}
+
 }
