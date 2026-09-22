@@ -393,10 +393,6 @@ impl ABIMachineSpec for Sia32MachineDeps {
         let save_base = frame_layout.fixed_frame_storage_size
             + frame_layout.stackslots_size
             + frame_layout.outgoing_args_size;
-        out.push(Inst::Mov {
-            dst: regs::writable_stack_reg(),
-            src: regs::frame_reg(),
-        });
         if lr_size != 0 {
             out.push(Inst::StoreBaseOffset {
                 src: regs::link_reg(),
@@ -439,6 +435,10 @@ impl ABIMachineSpec for Sia32MachineDeps {
         let save_base = frame_layout.fixed_frame_storage_size
             + frame_layout.stackslots_size
             + frame_layout.outgoing_args_size;
+        out.push(Inst::Mov {
+            dst: regs::writable_stack_reg(),
+            src: regs::frame_reg(),
+        });
         if lr_size != 0 {
             out.push(Inst::LoadBaseOffset {
                 dst: regs::writable_link_reg(),
