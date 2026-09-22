@@ -22,6 +22,10 @@
     (LoadConst32
       (dst WritableReg)
       (value u32))
+    (LoadExtName
+      (dst WritableReg)
+      (name BoxExternalName)
+      (offset i64))
     (Add
       (dst WritableReg)
       (lhs Reg)
