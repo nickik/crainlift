@@ -136,9 +136,9 @@
             (_ Unit (emit (sia_m_gpr_read saved 13)))
             (amount Reg (put_in_reg size))
             (next WritableReg (temp_writable_reg $I32))
-            (_ Unit (emit (sia_add next (writable_reg_to_reg saved) amount)))
-            (_ Unit (emit (sia_m_gpr_write (writable_reg_to_reg next) 13))))
-        (side_effect (SideEffectNoResult.Inst (MInst.Nop)))))
+            (_ Unit (emit (sia_add next (writable_reg_to_reg saved) amount))))
+        (side_effect (SideEffectNoResult.Inst
+          (sia_m_gpr_write (writable_reg_to_reg next) 13)))))
 
 ;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
