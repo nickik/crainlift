@@ -556,6 +556,33 @@ fn record_call<T>(code: &mut MachBuffer<Inst>, state: &mut EmitState, info: &Cal
     }
 }
 
+fn emit_ext_name32(
+    code: &mut MachBuffer<Inst>,
+    state: &mut EmitState,
+    dst: regs::Reg,
+    name: &ExternalName,
+    addend: i64,
+) {
+    let literal = code.get_label();
+    let done = code.get_label();
+
+    let load_at = code.cur_offset();
+    code.use_label_at_offset(load_at, literal, LabelUse::Literal8);
+    put_word(code, encode::ldpc_w(dst, 0).unwrap());
+
+    let branch_at = code.cur_offset();
+    code.use_label_at_offset(branch_at, done, LabelUse::Branch11);
+    code.add_uncond_branch(branch_at, branch_at + 2, done);
+    put_word(code, encode::b(0).unwrap());
+
+    code.align_to(4);
+    code.bind_label(literal, state.ctrl_plane_mut());
+    code.add_reloc(Reloc::Abs4, name, addend);
+    code.put4(0);
+    code.bind_label(done, state.ctrl_plane_mut());
+}
+
+
 fn emit_direct_call(
     code: &mut MachBuffer<Inst>,
     state: &mut EmitState,
