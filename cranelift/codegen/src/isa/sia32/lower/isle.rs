@@ -463,8 +463,8 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
 
     fn sia_m_gpr_read(&mut self, dst: WritableReg, register: u8) -> MInst {
         assert!(
-            matches!(register, 1..=11 | 15),
-            "fixed GPR read must name an ABI GPR"
+            matches!(register, 1..=11 | 13 | 15),
+            "fixed GPR read must name an ABI GPR or architectural SP"
         );
         MInst::ReadFixedGpr {
             dst,
