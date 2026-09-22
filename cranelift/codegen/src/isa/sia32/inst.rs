@@ -164,6 +164,11 @@ pub(crate) enum Inst {
         dst: Writable<Reg>,
         value: u32,
     },
+    LoadExtName {
+        dst: Writable<Reg>,
+        name: ExternalName,
+        offset: i64,
+    },
     Load {
         op: LoadOp,
         dst: Writable<Reg>,
@@ -551,6 +556,33 @@ fn record_call<T>(code: &mut MachBuffer<Inst>, state: &mut EmitState, info: &Cal
     }
 }
 
+fn emit_ext_name32(
+    code: &mut MachBuffer<Inst>,
+    state: &mut EmitState,
+    dst: regs::Reg,
+    name: &ExternalName,
+    addend: i64,
+) {
+    let literal = code.get_label();
+    let done = code.get_label();
+
+    let load_at = code.cur_offset();
+    code.use_label_at_offset(load_at, literal, LabelUse::Literal8);
+    put_word(code, encode::ldpc_w(dst, 0).unwrap());
+
+    let branch_at = code.cur_offset();
+    code.use_label_at_offset(branch_at, done, LabelUse::Branch11);
+    code.add_uncond_branch(branch_at, branch_at + 2, done);
+    put_word(code, encode::b(0).unwrap());
+
+    code.align_to(4);
+    code.bind_label(literal, state.ctrl_plane_mut());
+    code.add_reloc(Reloc::Abs4, name, addend);
+    code.put4(0);
+    code.bind_label(done, state.ctrl_plane_mut());
+}
+
+
 fn emit_direct_call(
     code: &mut MachBuffer<Inst>,
     state: &mut EmitState,
@@ -584,6 +616,7 @@ impl Inst {
             Self::TwoOp { .. } | Self::ShiftImm { .. } | Self::Addi7 { .. } => 4,
             Self::Icmp { .. } => 10,
             Self::LoadConst32 { .. } => 18,
+            Self::LoadExtName { .. } => 10,
             Self::BrNz { .. } => 4,
             Self::Extend { .. } => 6,
             Self::AddImm { .. } | Self::SpAdjust { .. } | Self::StackAddr { .. } => 22,
@@ -662,9 +695,10 @@ impl MachInst for Inst {
                 collector.reg_use(src);
                 collector.reg_def(dst);
             }
-            Self::Li7 { dst, .. } | Self::LoadConst32 { dst, .. } | Self::StackAddr { dst, .. } => {
-                collector.reg_def(dst)
-            }
+            Self::Li7 { dst, .. }
+            | Self::LoadConst32 { dst, .. }
+            | Self::LoadExtName { dst, .. }
+            | Self::StackAddr { dst, .. } => collector.reg_def(dst),
             Self::Load { dst, base, .. } | Self::LoadBaseOffset { dst, base, .. } => {
                 collector.reg_use(base);
                 collector.reg_def(dst);
@@ -1083,6 +1117,9 @@ impl MachInstEmit for Inst {
                 } else {
                     emit_literal32(code, state, arch_reg(dst.to_reg()), *value);
                 }
+            }
+            Self::LoadExtName { dst, name, offset } => {
+                emit_ext_name32(code, state, arch_reg(dst.to_reg()), name, *offset)
             }
             Self::Load { op, dst, base } => {
                 emit_load_zero_offset(code, *op, arch_reg(dst.to_reg()), arch_reg(*base))

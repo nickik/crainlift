@@ -86,6 +86,11 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
             dst: *dst,
             value: *value,
         },
+        MInst::LoadExtName { dst, name, offset } => MachineInst::LoadExtName {
+            dst: *dst,
+            name: name.as_ref().clone(),
+            offset: *offset,
+        },
         MInst::Add { dst, lhs, rhs } => MachineInst::Add {
             dst: *dst,
             lhs: *lhs,
@@ -304,6 +309,15 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
     fn sia_load_const(&mut self, dst: WritableReg, value: u64) -> MInst {
         let value = u32::try_from(value).expect("SIA32 word iconst must fit 32 bits");
         MInst::LoadConst32 { dst, value }
+    }
+
+    fn sia_load_ext_name(
+        &mut self,
+        dst: WritableReg,
+        name: BoxExternalName,
+        offset: i64,
+    ) -> MInst {
+        MInst::LoadExtName { dst, name, offset }
     }
 
     fn sia_add(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
