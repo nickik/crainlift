@@ -395,6 +395,8 @@ fn architectural_stack_pointer_can_be_read_and_restored_for_dynamic_alloca() {
     .expect("SIA32 compiler stack-pointer access must lower through production pipeline");
     assert!(!code.is_empty());
     assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
+}
+
 #[test]
 fn dynamic_stack_alloc_compiles_through_production_sia32_pipeline() {
     let code = compile_i32_expression(|pos| {
@@ -404,6 +406,4 @@ fn dynamic_stack_alloc_compiles_through_production_sia32_pipeline() {
     .expect("SIA32 dynamic stack allocation must lower through production pipeline");
     assert!(!code.is_empty());
     assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
-}
-
 }
