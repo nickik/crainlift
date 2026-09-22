@@ -4,7 +4,7 @@ use cranelift_codegen::Context;
 use cranelift_codegen::cursor::{Cursor, FuncCursor};
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
-    ExternalName, ExtFuncData, Function, InstBuilder, MemFlagsData, Signature, StackSlotData,
+    ExtFuncData, ExternalName, Function, InstBuilder, MemFlagsData, Signature, StackSlotData,
     StackSlotKind, Type, UserExternalName, UserFuncName, Value,
     types::{I8, I16, I32, I64},
 };
@@ -434,12 +434,11 @@ fn dynamic_stack_allocation_survives_call_and_fixed_slot_access() {
         pos.goto_bottom(block);
         let fixed = pos.ins().stack_addr(I32, slot, 0);
         let before = pos.ins().iconst(I32, 7);
-        pos.ins()
-            .store(MemFlagsData::new(), before, fixed, 0);
+        pos.ins().store(MemFlagsData::new(), before, fixed, 0);
         let size = pos.ins().iconst(I32, 32);
         let _dynamic = pos.ins().stack_alloc_dynamic(I32, size);
         pos.ins().call(callee, &[]);
-        let after = pos.ins().load(I32, MemFlagsData::new().into(), fixed, 0);
+        let after = pos.ins().load(I32, MemFlagsData::new(), fixed, 0);
         pos.ins().return_(&[after]);
     }
     let code = compile_function(func)
