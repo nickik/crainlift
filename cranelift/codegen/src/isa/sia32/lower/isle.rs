@@ -306,6 +306,15 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         MInst::LoadConst32 { dst, value }
     }
 
+    fn sia_load_ext_name(
+        &mut self,
+        dst: WritableReg,
+        name: BoxExternalName,
+        offset: i64,
+    ) -> MInst {
+        MInst::LoadExtName { dst, name, offset }
+    }
+
     fn sia_add(&mut self, dst: WritableReg, lhs: Reg, rhs: Reg) -> MInst {
         MInst::Add { dst, lhs, rhs }
     }
