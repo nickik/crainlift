@@ -164,6 +164,11 @@ pub(crate) enum Inst {
         dst: Writable<Reg>,
         value: u32,
     },
+    LoadExtName {
+        dst: Writable<Reg>,
+        name: ExternalName,
+        offset: i64,
+    },
     Load {
         op: LoadOp,
         dst: Writable<Reg>,
@@ -584,6 +589,7 @@ impl Inst {
             Self::TwoOp { .. } | Self::ShiftImm { .. } | Self::Addi7 { .. } => 4,
             Self::Icmp { .. } => 10,
             Self::LoadConst32 { .. } => 18,
+            Self::LoadExtName { .. } => 10,
             Self::BrNz { .. } => 4,
             Self::Extend { .. } => 6,
             Self::AddImm { .. } | Self::SpAdjust { .. } | Self::StackAddr { .. } => 22,
@@ -1083,6 +1089,9 @@ impl MachInstEmit for Inst {
                 } else {
                     emit_literal32(code, state, arch_reg(dst.to_reg()), *value);
                 }
+            }
+            Self::LoadExtName { dst, name, offset } => {
+                emit_ext_name32(code, state, arch_reg(dst.to_reg()), name, *offset)
             }
             Self::Load { op, dst, base } => {
                 emit_load_zero_offset(code, *op, arch_reg(dst.to_reg()), arch_reg(*base))
