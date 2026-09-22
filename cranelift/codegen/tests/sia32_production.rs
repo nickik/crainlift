@@ -380,4 +380,19 @@ fn sia32_integer_comparisons_compile_to_canonical_booleans() {
         assert!(!code.is_empty(), "{cc:?} emitted no code");
         assert_eq!(code.len() % 2, 0, "{cc:?} output must be halfword aligned");
     }
+#[test]
+fn architectural_stack_pointer_can_be_read_and_restored_for_dynamic_alloca() {
+    let code = compile_i32_expression(|pos| {
+        let saved_sp = pos.ins().sia_gpr_read(I32, 13);
+        let size = pos.ins().iconst(I32, 32);
+        let new_sp = pos.ins().isub(saved_sp, size);
+        pos.ins().sia_gpr_write(new_sp, 13);
+        pos.ins().sia_gpr_write(saved_sp, 13);
+        saved_sp
+    })
+    .expect("SIA32 compiler stack-pointer access must lower through production pipeline");
+    assert!(!code.is_empty());
+    assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
+}
+
 }
