@@ -80,7 +80,7 @@ SIA32 facts that drive the design:
 - [x] Permit compiler-generated `sia_gpr_read.i32 13` to snapshot architectural SP; `sia_gpr_write ..., 13` already restores/updates SP.
 - [x] Add production-pipeline regression proving SP read, runtime arithmetic, SP write and restoration lower together.
 - [x] Add a dedicated non-privileged `stack_alloc_dynamic(size) -> addr` CLIF operation and SIA32 lowering so language frontends do not name r13 directly.
-- [ ] Make fixed stack-slot addressing stable while SP is dynamically displaced (frame-base strategy or equivalent).
+- [ ] Make fixed stack-slot addressing stable while SP is dynamically displaced. Audit confirms current `StackAMode::{Slot,IncomingArg,OutgoingArg}` emission is directly SP-relative and r15 is currently allocatable; next slice must reserve r15 as a frame base (or introduce an equivalent dedicated base) before dynamic allocation can coexist with fixed slots/calls.
 - [ ] Define scope/return restoration rules and call interaction before Cosmic C enables general VLA lowering.
 
 ## M2 — Register file, machine instruction model and exact encoder
