@@ -3405,6 +3405,19 @@ pub(crate) fn define(
         .other_side_effects(),
     );
 
+    // Compiler-facing runtime stack allocation. This is target-independent
+    // IR: backends either lower it to their ABI stack mechanism or reject it.
+    ig.push(
+        Inst::new(
+            "stack_alloc_dynamic",
+            "Allocate size bytes from the current function stack at runtime and return the base address. The allocation lives until the function restores its dynamic stack state.",
+            &formats.unary,
+        )
+        .operands_in(&[Operand::new("size", i32_)])
+        .operands_out(&[Operand::new("addr", iAddr)])
+        .other_side_effects(),
+    );
+
     // Target-specific protected-machine escape hatch used by the SIA32
     // freestanding pipeline. Backends without SIA32 semantics reject these.
     ig.push(
