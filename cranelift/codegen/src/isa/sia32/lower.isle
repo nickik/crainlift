@@ -129,6 +129,17 @@
             (_ Unit (emit (sia_m_gpr_write (writable_reg_to_reg next) 13))))
         (output (value_reg (writable_reg_to_reg next)))))
 
+;; Release a prior runtime allocation by moving the architectural stack
+;; pointer upward by the same byte count.
+(rule (lower (stack_free_dynamic size))
+      (let ((saved WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_m_gpr_read saved 13)))
+            (amount Reg (put_in_reg size))
+            (next WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_add next (writable_reg_to_reg saved) amount)))
+            (_ Unit (emit (sia_m_gpr_write (writable_reg_to_reg next) 13))))
+        (side_effect SideEffectNoResult.None)))
+
 ;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; stack_addr is an ABI pseudo: keep the stack-slot identity until post-regalloc
