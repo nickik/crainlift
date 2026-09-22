@@ -418,11 +418,12 @@ fn dynamic_stack_allocation_survives_call_and_fixed_slot_access() {
         .sized_stack_slots
         .push(StackSlotData::new(StackSlotKind::ExplicitSlot, 4, 2));
     let callee_sig = func.import_signature(Signature::new(CallConv::SystemV));
+    let callee_name = func.declare_imported_user_function(UserExternalName {
+        namespace: 0,
+        index: 1,
+    });
     let callee = func.import_function(ExtFuncData {
-        name: ExternalName::User(func.declare_imported_user_function(UserExternalName {
-            namespace: 0,
-            index: 1,
-        })),
+        name: ExternalName::User(callee_name),
         signature: callee_sig,
         colocated: false,
         patchable: false,
