@@ -461,19 +461,6 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         )
     }
 
-    /// Compiler-facing dynamic-stack primitive: snapshot architectural SP.
-    ///
-    /// Kept here rather than open-coding r13 in frontend-specific lowering so
-    /// the SIA32 ABI owns the architectural register choice.
-    fn sia_dynamic_stack_pointer(&mut self, dst: WritableReg) -> MInst {
-        MInst::ReadFixedGpr { dst, index: 13 }
-    }
-
-    /// Compiler-facing dynamic-stack primitive: install a runtime SP value.
-    fn sia_set_dynamic_stack_pointer(&mut self, src: Reg) -> MInst {
-        MInst::WriteFixedGpr { src, index: 13 }
-    }
-
     fn sia_m_gpr_read(&mut self, dst: WritableReg, register: u8) -> MInst {
         assert!(
             matches!(register, 1..=11 | 13 | 15),
