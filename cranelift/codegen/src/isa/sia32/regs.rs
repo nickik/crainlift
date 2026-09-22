@@ -150,10 +150,7 @@ pub const fn create_reg_environment() -> MachineEnv {
     // frame pointer, so withholding r15 needlessly reduces the allocator to
     // eleven registers and makes call-heavy generated code unallocatable.
     let non_preferred_regs_by_class = [
-        PRegSet::empty()
-            .with(preg(9))
-            .with(preg(10))
-            .with(preg(11)),
+        PRegSet::empty().with(preg(9)).with(preg(10)).with(preg(11)),
         PRegSet::empty(),
         PRegSet::empty(),
     ];
