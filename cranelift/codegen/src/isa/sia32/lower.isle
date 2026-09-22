@@ -110,6 +110,19 @@
 (rule (lower (ireduce $I16 x @ (value_type $I32))) (output_value x))
 
 
+;;;; Dynamic stack allocation ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Runtime allocation grows the SIA32 stack downward. The generic IR operation
+;; deliberately hides architectural r13 from language frontends.
+(rule (lower (stack_alloc_dynamic $I32 size))
+      (let ((saved WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_m_gpr_read saved 13)))
+            (amount Reg (put_in_reg size))
+            (next WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_sub next (writable_reg_to_reg saved) amount)))
+            (_ Unit (emit (sia_m_gpr_write (writable_reg_to_reg next) 13))))
+        (output (value_reg (writable_reg_to_reg next)))))
+
 ;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; stack_addr is an ABI pseudo: keep the stack-slot identity until post-regalloc
