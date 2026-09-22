@@ -18,6 +18,7 @@ impl Reg {
     pub const SP: Self = Self(13);
     pub const LR: Self = Self(14);
     pub const SCRATCH: Self = Self(12);
+    pub const FP: Self = Self(15);
 
     pub const fn new(index: u8) -> Option<Self> {
         if index < 16 { Some(Self(index)) } else { None }
@@ -39,13 +40,13 @@ impl Reg {
         self.0 == 12
     }
     pub const fn normally_allocatable(self) -> bool {
-        matches!(self.0, 1..=11 | 15)
+        matches!(self.0, 1..=11)
     }
     pub const fn caller_saved(self) -> bool {
         matches!(self.0, 1..=8)
     }
     pub const fn callee_saved(self) -> bool {
-        matches!(self.0, 9..=11 | 15)
+        matches!(self.0, 9..=11)
     }
     pub const fn argument_index(self) -> Option<u8> {
         match self.0 {
@@ -78,7 +79,7 @@ pub const CALLER_SAVED: [Reg; 8] = [
     Reg(7),
     Reg(8),
 ];
-pub const CALLEE_SAVED: [Reg; 4] = [Reg(9), Reg(10), Reg(11), Reg(15)];
+pub const CALLEE_SAVED: [Reg; 3] = [Reg(9), Reg(10), Reg(11)];
 
 pub const fn preg(index: u8) -> PReg {
     assert!(index < 16);
@@ -96,6 +97,9 @@ pub const fn stack_reg() -> MachReg {
 }
 pub const fn link_reg() -> MachReg {
     mach_reg(Reg::LR.index())
+}
+pub const fn frame_reg() -> MachReg {
+    mach_reg(Reg::FP.index())
 }
 pub const fn scratch_reg() -> MachReg {
     mach_reg(Reg::SCRATCH.index())
@@ -115,6 +119,9 @@ pub fn writable_stack_reg() -> Writable<MachReg> {
 }
 pub fn writable_link_reg() -> Writable<MachReg> {
     Writable::from_reg(link_reg())
+}
+pub fn writable_frame_reg() -> Writable<MachReg> {
+    Writable::from_reg(frame_reg())
 }
 pub fn writable_scratch_reg() -> Writable<MachReg> {
     Writable::from_reg(scratch_reg())
@@ -138,7 +145,7 @@ pub const fn create_reg_environment() -> MachineEnv {
         PRegSet::empty(),
         PRegSet::empty(),
     ];
-    // r15 is an ordinary callee-saved register in the current SIA32 ABI.
+    // r15 is reserved as the stable frame base for dynamic stack allocation.
     // Stack slots are SP-relative and the prologue does not establish a fixed
     // frame pointer, so withholding r15 needlessly reduces the allocator to
     // eleven registers and makes call-heavy generated code unallocatable.
@@ -146,8 +153,7 @@ pub const fn create_reg_environment() -> MachineEnv {
         PRegSet::empty()
             .with(preg(9))
             .with(preg(10))
-            .with(preg(11))
-            .with(preg(15)),
+            .with(preg(11)),
         PRegSet::empty(),
         PRegSet::empty(),
     ];

@@ -384,6 +384,10 @@ impl ABIMachineSpec for Sia32MachineDeps {
         out.push(Inst::SpAdjust {
             amount: -(stack_size as i32),
         });
+        out.push(Inst::Mov {
+            dst: regs::writable_frame_reg(),
+            src: regs::stack_reg(),
+        });
         // Keep callee saves above the fixed/outgoing frame so StackAMode::Slot
         // offsets remain based at the current SP and never address above the caller SP.
         let save_base = frame_layout.fixed_frame_storage_size
@@ -431,6 +435,10 @@ impl ABIMachineSpec for Sia32MachineDeps {
         let save_base = frame_layout.fixed_frame_storage_size
             + frame_layout.stackslots_size
             + frame_layout.outgoing_args_size;
+        out.push(Inst::Mov {
+            dst: regs::writable_stack_reg(),
+            src: regs::frame_reg(),
+        });
         if lr_size != 0 {
             out.push(Inst::LoadBaseOffset {
                 dst: regs::writable_link_reg(),

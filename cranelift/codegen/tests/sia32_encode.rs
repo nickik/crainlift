@@ -34,15 +34,16 @@ fn register_abi_roles_are_frozen() {
     assert_eq!(Reg::SP.index(), 13);
     assert_eq!(Reg::LR.index(), 14);
     assert_eq!(Reg::SCRATCH.index(), 12);
+    assert_eq!(Reg::FP.index(), 15);
     assert_eq!(sia32::regs::ARG_REGS.map(Reg::index), [1, 2, 3, 4, 5, 6]);
     assert_eq!(sia32::regs::RETURN_LOW.index(), 1);
     assert_eq!(sia32::regs::RETURN_HIGH.index(), 2);
     assert!(r(8).caller_saved());
     assert!(!r(9).caller_saved());
     assert!(r(9).callee_saved());
-    assert!(r(15).callee_saved());
+    assert!(!r(15).callee_saved());
     assert!(!r(12).normally_allocatable());
-    assert!(r(15).normally_allocatable());
+    assert!(!r(15).normally_allocatable());
 }
 
 #[test]
