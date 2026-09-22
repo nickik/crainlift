@@ -114,7 +114,7 @@
 
 ;; Runtime allocation grows the SIA32 stack downward. The generic IR operation
 ;; deliberately hides architectural r13 from language frontends.
-(rule (lower (stack_alloc_dynamic size))
+(rule (lower (stack_alloc_dynamic $I32 size))
       (let ((saved WritableReg (temp_writable_reg $I32))
             (_ Unit (emit (sia_m_gpr_read saved 13)))
             (amount Reg (put_in_reg size))
