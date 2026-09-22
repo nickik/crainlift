@@ -155,6 +155,11 @@
         output))
 
 
+;;;; Dynamic stack support ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(decl sia_dynamic_stack_pointer (WritableReg) MInst)
+(decl sia_set_dynamic_stack_pointer (Reg) MInst)
+
 ;;;; SIA32-P privileged operations ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (rule (lower (sia_trap (u8_from_uimm8 code)))
       (side_effect (SideEffectNoResult.Inst (sia_m_trap code))))
