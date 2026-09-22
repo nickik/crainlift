@@ -79,7 +79,7 @@ SIA32 facts that drive the design:
 
 - [x] Permit compiler-generated `sia_gpr_read.i32 13` to snapshot architectural SP; `sia_gpr_write ..., 13` already restores/updates SP.
 - [x] Add production-pipeline regression proving SP read, runtime arithmetic, SP write and restoration lower together.
-- [ ] Add a dedicated non-privileged CLIF stack-allocation abstraction so frontends do not need to name r13 directly.
+- [ ] Add a dedicated non-privileged CLIF stack-allocation instruction so frontends do not name r13 directly. Backend semantic helpers for snapshot/install SP now exist; wiring them to a dedicated IR opcode is next.
 - [ ] Make fixed stack-slot addressing stable while SP is dynamically displaced (frame-base strategy or equivalent).
 - [ ] Define scope/return restoration rules and call interaction before Cosmic C enables general VLA lowering.
 
