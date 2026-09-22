@@ -407,6 +407,8 @@ fn dynamic_stack_alloc_compiles_through_production_sia32_pipeline() {
     .expect("SIA32 dynamic stack allocation must lower through production pipeline");
     assert!(!code.is_empty());
     assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
+}
+
 #[test]
 fn dynamic_stack_allocation_survives_call_and_fixed_slot_access() {
     let mut sig = Signature::new(CallConv::SystemV);
@@ -423,6 +425,7 @@ fn dynamic_stack_allocation_survives_call_and_fixed_slot_access() {
         })),
         signature: callee_sig,
         colocated: false,
+        patchable: false,
     });
     let block = func.dfg.make_block();
     func.layout.append_block(block);
@@ -442,6 +445,4 @@ fn dynamic_stack_allocation_survives_call_and_fixed_slot_access() {
         .expect("dynamic SP displacement must coexist with calls and fixed stack slots");
     assert!(!code.is_empty());
     assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
-}
-
 }
