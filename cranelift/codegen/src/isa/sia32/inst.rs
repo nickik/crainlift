@@ -1106,17 +1106,17 @@ impl MachInstEmit for Inst {
                     code,
                     load_op(*ty),
                     arch_reg(dst.to_reg()),
-                    regs::Reg::SP,
+                    regs::Reg::FP,
                     off,
                 );
             }
             Self::StoreStack { src, mem, ty } => {
                 let off = frame_stack_offset(mem, &state.frame_layout);
-                emit_store_base_offset(code, store_op(*ty), arch_reg(*src), regs::Reg::SP, off);
+                emit_store_base_offset(code, store_op(*ty), arch_reg(*src), regs::Reg::FP, off);
             }
             Self::StackAddr { dst, mem } => {
                 let off = frame_stack_offset(mem, &state.frame_layout);
-                emit_add_imm32(code, arch_reg(dst.to_reg()), regs::Reg::SP, off);
+                emit_add_imm32(code, arch_reg(dst.to_reg()), regs::Reg::FP, off);
             }
             Self::LoadBaseOffset {
                 dst,
