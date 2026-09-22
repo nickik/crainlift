@@ -401,7 +401,7 @@ fn architectural_stack_pointer_can_be_read_and_restored_for_dynamic_alloca() {
 fn dynamic_stack_alloc_compiles_through_production_sia32_pipeline() {
     let code = compile_i32_expression(|pos| {
         let size = pos.ins().iconst(I32, 32);
-        pos.ins().stack_alloc_dynamic(size)
+        pos.ins().stack_alloc_dynamic(I32, size)
     })
     .expect("SIA32 dynamic stack allocation must lower through production pipeline");
     assert!(!code.is_empty());
