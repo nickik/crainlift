@@ -32,6 +32,18 @@ use target_lexicon::{PointerWidth, Triple};
 /// interchange contract between the SIA compiler, tools, and simulator. It is
 /// not an attempt to identify SIA code as any registered architecture.
 const ELF_EM_SIA32_PRIVATE: u16 = 0xff53;
+/// Private ELF32 REL type: a little-endian address word holding signed i32 A;
+/// the linker writes checked unsigned-32-bit S + A. Not an x86 relocation.
+const ELF_R_SIA32_ABS32: u32 = 0x80;
+
+fn validate_sia32_reloc(kind: Reloc, addend: Addend) -> ModuleResult<()> {
+    if kind != Reloc::Abs4 || i32::try_from(addend).is_err() {
+        return Err(ModuleError::Backend(anyhow!(
+            "SIA32 ELF supports only ABS32 with a signed 32-bit addend: {kind:?}, {addend}"
+        )));
+    }
+    Ok(())
+}
 
 /// A builder for `ObjectModule`.
 pub struct ObjectBuilder {
@@ -44,9 +56,8 @@ pub struct ObjectBuilder {
     libcall_names: Box<dyn Fn(ir::LibCall) -> String + Send + Sync>,
     per_function_section: bool,
     per_data_object_section: bool,
-    /// The object crate has no SIA architecture yet. For the relocation-free
-    /// R0 subset it can still write the generic ELF32 layout; `emit` patches
-    /// the final `e_machine` to the SIA-specific value above.
+    /// The object crate has no SIA architecture yet. For SIA it writes the generic ELF32 layout; `emit` patches
+    /// machine identity and ABS32 relocation types to the private contract.
     sia32_private_elf: bool,
     #[cfg(feature = "unwind")]
     unwind_info: bool,
@@ -66,11 +77,13 @@ impl ObjectBuilder {
         libcall_names: Box<dyn Fn(ir::LibCall) -> String + Send + Sync>,
     ) -> ModuleResult<Self> {
         let mut file_flags = object::FileFlags::None;
-        let sia32_bare_metal = matches!(isa.triple().architecture, target_lexicon::Architecture::Sia32)
-            && matches!(
-                isa.triple().binary_format,
-                target_lexicon::BinaryFormat::Unknown
-            );
+        let sia32_bare_metal = matches!(
+            isa.triple().architecture,
+            target_lexicon::Architecture::Sia32
+        ) && matches!(
+            isa.triple().binary_format,
+            target_lexicon::BinaryFormat::Unknown
+        );
         let binary_format = match isa.triple().binary_format {
             target_lexicon::BinaryFormat::Elf => object::BinaryFormat::Elf,
             target_lexicon::BinaryFormat::Coff => object::BinaryFormat::Coff,
@@ -494,10 +507,10 @@ impl Module for ObjectModule {
             None
         };
         let buffer = &compiled.buffer;
-        if self.sia32_private_elf && !buffer.relocs().is_empty() {
-            return Err(ModuleError::Backend(anyhow!(
-                "SIA32 R0 ELF output supports relocation-free functions only; define SIA relocation semantics before emitting references",
-            )));
+        if self.sia32_private_elf {
+            for reloc in buffer.relocs() {
+                validate_sia32_reloc(reloc.kind, reloc.addend)?;
+            }
         }
         let relocs = buffer
             .relocs()
@@ -522,10 +535,10 @@ impl Module for ObjectModule {
         bytes: &[u8],
         relocs: &[ModuleReloc],
     ) -> ModuleResult<()> {
-        if self.sia32_private_elf && !relocs.is_empty() {
-            return Err(ModuleError::Backend(anyhow!(
-                "SIA32 R0 ELF output supports relocation-free functions only; define SIA relocation semantics before emitting references",
-            )));
+        if self.sia32_private_elf {
+            for reloc in relocs {
+                validate_sia32_reloc(reloc.kind, reloc.addend)?;
+            }
         }
         let relocs = relocs
             .iter()
@@ -567,10 +580,10 @@ impl Module for ObjectModule {
             PointerWidth::U64 => Reloc::Abs8,
         };
         let data_relocs = data.all_relocs(pointer_reloc).collect::<Vec<_>>();
-        if self.sia32_private_elf && !data_relocs.is_empty() {
-            return Err(ModuleError::Backend(anyhow!(
-                "SIA32 R0 ELF output supports relocation-free data only; define SIA relocation semantics before emitting references",
-            )));
+        if self.sia32_private_elf {
+            for reloc in &data_relocs {
+                validate_sia32_reloc(reloc.kind, reloc.addend)?;
+            }
         }
         let relocs = data_relocs
             .iter()
@@ -1216,6 +1229,33 @@ impl ObjectProduct {
             debug_assert_eq!(bytes[4], 1, "SIA32 must use ELFCLASS32");
             debug_assert_eq!(bytes[5], 1, "SIA32 must use little-endian ELF");
             bytes[18..20].copy_from_slice(&ELF_EM_SIA32_PRIVATE.to_le_bytes());
+            // The structural writer uses I386's 32-bit REL/addend machinery
+            // internally. No foreign relocation number escapes this boundary.
+            let shoff = u32::from_le_bytes(bytes[32..36].try_into().unwrap()) as usize;
+            let shnum = u16::from_le_bytes(bytes[48..50].try_into().unwrap()) as usize;
+            for index in 0..shnum {
+                let header = shoff + index * 40;
+                let kind = u32::from_le_bytes(bytes[header + 4..header + 8].try_into().unwrap());
+                if kind == elf::SHT_REL.0 {
+                    let offset =
+                        u32::from_le_bytes(bytes[header + 16..header + 20].try_into().unwrap())
+                            as usize;
+                    let size =
+                        u32::from_le_bytes(bytes[header + 20..header + 24].try_into().unwrap())
+                            as usize;
+                    for site in (offset..offset + size).step_by(8) {
+                        let info =
+                            u32::from_le_bytes(bytes[site + 4..site + 8].try_into().unwrap());
+                        assert_eq!(
+                            info & 0xff,
+                            elf::R_386_32.0,
+                            "only validated ABS32 can reach the SIA writer"
+                        );
+                        bytes[site + 4..site + 8]
+                            .copy_from_slice(&((info & !0xff) | ELF_R_SIA32_ABS32).to_le_bytes());
+                    }
+                }
+            }
         }
         Ok(bytes)
     }

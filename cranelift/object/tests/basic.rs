@@ -683,3 +683,71 @@ mod eh_frame {
         );
     }
 }
+
+#[test]
+fn sia32_data_relocation_uses_private_abs32_and_signed_addend() {
+    use object::{Object as _, ObjectSection as _};
+    let isa = cranelift_codegen::isa::lookup_by_name("sia32-unknown-none")
+        .unwrap()
+        .finish(settings::Flags::new(settings::builder()))
+        .unwrap();
+    let mut module =
+        ObjectModule::new(ObjectBuilder::new(isa, "sia-reloc", default_libcall_names()).unwrap());
+    let target = module
+        .declare_data("target", Linkage::Import, false, false)
+        .unwrap();
+    let pointer = module
+        .declare_data("pointer", Linkage::Export, false, false)
+        .unwrap();
+    let mut data = DataDescription::new();
+    data.define(vec![0; 4].into_boxed_slice());
+    let target = module.declare_data_in_data(target, &mut data);
+    data.write_data_addr(0, target, -4);
+    module.define_data(pointer, &data).unwrap();
+    let bytes = module.finish().emit().unwrap();
+    let file = object::File::parse(&*bytes).unwrap();
+    let mut count = 0;
+    for section in file.sections() {
+        for (offset, reloc) in section.relocations() {
+            count += 1;
+            assert_eq!(
+                reloc.flags(),
+                object::RelocationFlags::Elf {
+                    r_type: object::elf::RelocationType(0x80)
+                }
+            );
+            assert_eq!(
+                &section.data().unwrap()[offset as usize..offset as usize + 4],
+                &(-4_i32).to_le_bytes()
+            );
+        }
+    }
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn sia32_rejects_addends_outside_signed_32_bit_range() {
+    let isa = cranelift_codegen::isa::lookup_by_name("sia32-unknown-none")
+        .unwrap()
+        .finish(settings::Flags::new(settings::builder()))
+        .unwrap();
+    let mut module =
+        ObjectModule::new(ObjectBuilder::new(isa, "sia-reloc", default_libcall_names()).unwrap());
+    let target = module
+        .declare_data("target", Linkage::Import, false, false)
+        .unwrap();
+    let pointer = module
+        .declare_data("pointer", Linkage::Export, false, false)
+        .unwrap();
+    let mut data = DataDescription::new();
+    data.define(vec![0; 4].into_boxed_slice());
+    let target = module.declare_data_in_data(target, &mut data);
+    data.write_data_addr(0, target, i64::from(i32::MAX) + 1);
+    assert!(
+        module
+            .define_data(pointer, &data)
+            .unwrap_err()
+            .to_string()
+            .contains("signed 32-bit addend")
+    );
+}
