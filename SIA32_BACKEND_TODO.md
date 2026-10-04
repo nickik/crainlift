@@ -197,18 +197,18 @@ SIA32 facts that drive the design:
 ## M6 — 64-bit integers on a 32-bit machine
 
 - [ ] Audit the generic Cranelift pipeline for assumptions that legal native integer values are pointer-sized or smaller.
-- [ ] Decide representation of I64 as a two-GPR value for SIA.
+- [x] Decide representation of I64 as a two-GPR value for SIA.
 - [ ] Define pair ordering and alignment constraints.
 - [ ] Implement I64 copies/spills/reloads.
-- [ ] Implement I64 load/store as two 32-bit words with little-endian ordering.
-- [ ] Implement I64 add/sub using ADD plus ADC / SUB plus SBB or equivalent carry sequences.
-- [ ] Implement I64 bitwise operations.
-- [ ] Implement I64 equality and signed/unsigned comparisons.
-- [ ] Implement I64 shifts including cross-word shifts and all boundary counts.
+- [x] Implement I64 load/store as two 32-bit words with little-endian ordering.
+- [x] Implement I64 add/sub using ADD plus ADC / SUB plus SBB or equivalent carry sequences.
+- [x] Implement I64 bitwise operations.
+- [x] Implement I64 equality and signed/unsigned comparisons.
+- [~] Implement I64 shifts: constant counts including 0/31/32/33/63 pass; variable counts remain.
 - [ ] Implement I64 rotates if required.
 - [ ] Implement I64 multiply strategy (native pieces or libcall).
 - [ ] Implement I64 divide/remainder strategy (normally libcalls initially).
-- [ ] Implement I64 constants.
+- [x] Implement I64 constants.
 - [ ] Implement I64 arguments and returns in ABI register pairs/stack.
 - [ ] Add randomized differential tests against host 64-bit arithmetic for all supported I64 operations.
 - [ ] Decide I128 policy; normally explicitly unsupported/libcall-lowered unless Forge requires it.
@@ -313,3 +313,17 @@ The backend is useful for the first Forge-on-Lighting execution milestone when a
 - a compiled Forge program can execute in LightingSimulation and match the interpreter/reference result.
 
 I64, optional multiply/divide, soft-float, SIA32-P intrinsics and unwind/debug metadata can be staged after that minimum milestone unless an immediate Cosmic dependency requires one of them earlier.
+
+## Native I64 core evidence — 2026-10-04
+
+Core implementation landed at `3cf7afcb6e771e0de539f5cb9bf413574a8f6963`.
+Cosmic C's native ext2 prerequisite gate executes the compiler output through
+SoftwareCpuBoard/MainboardFPGA/RAM. Its 195 core cases cover constants,
+carry/borrow arithmetic, bitwise operators, signed/unsigned comparisons,
+constant cross-word shifts, extension/reduction, and array load/store round
+trips. Additional compiler address/width regressions bring the gate to 204
+cases. Focused backend unit/encoding/integration/production tests pass.
+
+This is partial M6 acceptance. Variable shifts, multiply/divide/remainder,
+rotates, randomized differential coverage, and comprehensive cross-function
+ABI/spill coverage remain open. No host arithmetic fallback is introduced.
