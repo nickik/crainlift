@@ -14,6 +14,7 @@ members = [
   "cranelift/isle/isle",
   "cranelift/module",
   "cranelift/native",
+  "cranelift/object",
   "cranelift/srcgen",
   "crates/core",
   "vendor/target-lexicon-sia",
@@ -80,6 +81,7 @@ regalloc2 = "0.15.2"
 target-lexicon = { path = "vendor/target-lexicon-sia" }
 
 # External dependencies required by the retained packages.
+object = { version = "0.40.0", default-features = false }
 arbitrary = "1.4.2"
 bumpalo = "3.20.2"
 mutatis = { version = "0.5.2", features = ["alloc", "derive", "check"] }
