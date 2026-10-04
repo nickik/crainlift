@@ -426,6 +426,60 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         dst.to_reg()
     }
 
+    fn sia_i64_bitcount(&mut self, value: ValueRegs, operation: u8) -> ValueRegs {
+        let op = match operation {
+            0 => UnaryOp::Clz,
+            1 => UnaryOp::Ctz,
+            2 => UnaryOp::Cpop,
+            _ => unreachable!(),
+        };
+        let low_count = self.temp_writable_reg(I32);
+        let high_count = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::Unary {
+            op,
+            dst: low_count,
+            src: value.regs()[0],
+        });
+        self.lower_ctx.emit(MachineInst::Unary {
+            op,
+            dst: high_count,
+            src: value.regs()[1],
+        });
+        let zero = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: zero,
+            value: 0,
+        });
+        let total = self.temp_writable_reg(I32);
+        let low = if operation == 2 {
+            self.lower_ctx.emit(MachineInst::Add {
+                dst: total,
+                lhs: low_count.to_reg(),
+                rhs: high_count.to_reg(),
+            });
+            total.to_reg()
+        } else {
+            let thirty_two = self.temp_writable_reg(I32);
+            self.lower_ctx.emit(MachineInst::LoadConst32 {
+                dst: thirty_two,
+                value: 32,
+            });
+            let (test, near, far) = if operation == 0 {
+                (value.regs()[1], high_count.to_reg(), low_count.to_reg())
+            } else {
+                (value.regs()[0], low_count.to_reg(), high_count.to_reg())
+            };
+            // Native clz/ctz produce 32 for a zero word, giving 64 for a zero pair.
+            self.lower_ctx.emit(MachineInst::Add {
+                dst: total,
+                lhs: far,
+                rhs: thirty_two.to_reg(),
+            });
+            self.sia_select(test, near, total.to_reg())
+        };
+        ValueRegs::two(low, zero.to_reg())
+    }
+
     fn sia_i64_variable_shift(
         &mut self,
         value: ValueRegs,

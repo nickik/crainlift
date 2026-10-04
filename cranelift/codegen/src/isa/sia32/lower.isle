@@ -382,3 +382,13 @@
 (decl sia_umulhi (Reg Reg) Reg)
 (extern constructor sia_umulhi sia_umulhi)
 (rule (lower (umulhi $I32 x y)) (output (sia_umulhi (put_in_reg x) (put_in_reg y))))
+
+(decl sia_i64_bitcount (ValueRegs u8) ValueRegs)
+(extern constructor sia_i64_bitcount sia_i64_bitcount)
+(rule (lower (clz $I64 x)) (output (sia_i64_bitcount (put_in_regs x) 0)))
+(rule (lower (ctz $I64 x)) (output (sia_i64_bitcount (put_in_regs x) 1)))
+(rule (lower (popcnt $I64 x)) (output (sia_i64_bitcount (put_in_regs x) 2)))
+
+(rule (lower (func_addr $I32 (func_ref_data _ name _ _)))
+      (let ((dst WritableReg (temp_writable_reg $I32)))
+        (sia_emit_result (sia_load_ext_name dst (box_external_name name) 0) dst)))
