@@ -654,6 +654,52 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         ValueRegs::two(low.to_reg(), high.to_reg())
     }
 
+    fn sia_i64_umulhi(&mut self, x: ValueRegs, y: ValueRegs) -> ValueRegs {
+        let multiply = |this: &mut Self, lhs: Reg, rhs: Reg, op: TwoOp| {
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx
+                .emit(MachineInst::TwoOp { op, dst, lhs, rhs });
+            dst.to_reg()
+        };
+        let add = |this: &mut Self, lhs: Reg, rhs: Reg| {
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx.emit(MachineInst::Add { dst, lhs, rhs });
+            dst.to_reg()
+        };
+        let add_carry = |this: &mut Self, lhs: Reg, rhs: Reg| {
+            let sum = add(this, lhs, rhs);
+            let carry = this.temp_writable_reg(I32);
+            this.lower_ctx.emit(MachineInst::Icmp {
+                dst: carry,
+                cc: IntCC::UnsignedLessThan,
+                lhs: sum,
+                rhs: lhs,
+            });
+            (sum, carry.to_reg())
+        };
+        let (x0, x1) = (x.regs()[0], x.regs()[1]);
+        let (y0, y1) = (y.regs()[0], y.regs()[1]);
+        let p00_high = multiply(self, x0, y0, TwoOp::MulUHigh);
+        let p10_low = multiply(self, x1, y0, TwoOp::Mul);
+        let p10_high = multiply(self, x1, y0, TwoOp::MulUHigh);
+        // t = x1*y0 + high(x0*y0) fits in 64 bits.
+        let (t_low, t_carry) = add_carry(self, p10_low, p00_high);
+        let t_high = add(self, p10_high, t_carry);
+        let p01_low = multiply(self, x0, y1, TwoOp::Mul);
+        let p01_high = multiply(self, x0, y1, TwoOp::MulUHigh);
+        // u = x0*y1 + low(t) also fits in 64 bits.
+        let (_, u_carry) = add_carry(self, p01_low, t_low);
+        let u_high = add(self, p01_high, u_carry);
+        let p11_low = multiply(self, x1, y1, TwoOp::Mul);
+        let p11_high = multiply(self, x1, y1, TwoOp::MulUHigh);
+        // high(x*y) = x1*y1 + high(t) + high(u). Keep both addition carries.
+        let (partial_low, carry_a) = add_carry(self, p11_low, t_high);
+        let (low, carry_b) = add_carry(self, partial_low, u_high);
+        let partial_high = add(self, p11_high, carry_a);
+        let high = add(self, partial_high, carry_b);
+        ValueRegs::two(low, high)
+    }
+
     fn sia_i64_mul(&mut self, x: ValueRegs, y: ValueRegs) -> ValueRegs {
         let low = self.temp_writable_reg(I32);
         let upper_low_product = self.temp_writable_reg(I32);

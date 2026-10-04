@@ -390,6 +390,18 @@
 (extern constructor sia_umulhi sia_umulhi)
 (rule (lower (umulhi $I32 x y)) (output (sia_umulhi (put_in_reg x) (put_in_reg y))))
 
+(rule (lower (umin $I32 x y))
+      (let ((lhs Reg (put_in_reg x))
+            (rhs Reg (put_in_reg y))
+            (condition WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_icmp condition (IntCC.UnsignedLessThan) lhs rhs))))
+        (output (sia_select (writable_reg_to_reg condition) lhs rhs))))
+
+(decl sia_i64_umulhi (ValueRegs ValueRegs) ValueRegs)
+(extern constructor sia_i64_umulhi sia_i64_umulhi)
+(rule (lower (umulhi $I64 x y))
+      (output (sia_i64_umulhi (put_in_regs x) (put_in_regs y))))
+
 (decl sia_i64_bitcount (ValueRegs u8) ValueRegs)
 (extern constructor sia_i64_bitcount sia_i64_bitcount)
 (rule (lower (clz $I64 x)) (output (sia_i64_bitcount (put_in_regs x) 0)))
