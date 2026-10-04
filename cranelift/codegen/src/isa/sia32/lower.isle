@@ -58,6 +58,13 @@
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_xor dst lhs rhs) dst)))
 
+(rule (lower (bnot (fits_in_32 (ty_int ty)) x))
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (ones WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_load_const ones 4294967295)))
+            (src Reg (put_in_reg x)))
+        (sia_emit_result (sia_xor dst src (writable_reg_to_reg ones)) dst)))
+
 ;; I32 shifts use SIA hardware count masking. Narrow shifts below explicitly
 ;; mask counts to their width and normalize the operand before shifting.
 (rule (lower (ishl $I32 x y))
@@ -231,7 +238,7 @@
       (emit_side_effect (SideEffectNoResult.Inst (sia_jump target))))
 
 (rule (lower_branch (brif cond _ _) (two_targets taken not_taken))
-      (let ((test Reg (put_in_reg cond)))
+      (let ((test Reg (sia_trap_test cond)))
         (emit_side_effect (SideEffectNoResult.Inst (sia_brnz test taken not_taken)))))
 
 ;; SIA32-MEM defines SIA-TSO and one architectural full data-memory FENCE.
