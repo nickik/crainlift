@@ -590,3 +590,55 @@ fn i64_multiplication_and_branch_tables_compile_natively() {
         }
     }
 }
+
+#[test]
+fn narrow_shifts_and_integer_selection_compile_natively() {
+    let output = std::env::var_os("SIA32_SELECT_SHIFT_OUTPUT").map(std::path::PathBuf::from);
+    if let Some(dir) = &output {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    for ty in [I8, I16, I32] {
+        for operation in ["select", "ishl", "ushr", "sshr"] {
+            if ty == I32 && operation != "select" {
+                continue;
+            }
+            let mut sig = Signature::new(CallConv::SystemV);
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(I32));
+            sig.params.push(cranelift_codegen::ir::AbiParam::new(I32));
+            sig.returns.push(cranelift_codegen::ir::AbiParam::new(I32));
+            let mut func =
+                Function::with_name_signature(UserFuncName::testcase("select_shift"), sig);
+            let block = func.dfg.make_block();
+            let a = func.dfg.append_block_param(block, I32);
+            let b = func.dfg.append_block_param(block, I32);
+            func.layout.append_block(block);
+            let mut pos = FuncCursor::new(&mut func).at_bottom(block);
+            let x = if ty == I32 {
+                a
+            } else {
+                pos.ins().ireduce(ty, a)
+            };
+            let result = match operation {
+                "select" => {
+                    let yes = pos.ins().iconst(ty, 0x57);
+                    let no = pos.ins().iconst(ty, 0x23);
+                    pos.ins().select(x, yes, no)
+                }
+                "ishl" => pos.ins().ishl(x, b),
+                "ushr" => pos.ins().ushr(x, b),
+                "sshr" => pos.ins().sshr(x, b),
+                _ => unreachable!(),
+            };
+            let result = if ty == I32 {
+                result
+            } else {
+                pos.ins().uextend(I32, result)
+            };
+            pos.ins().return_(&[result]);
+            let code = compile_function(func).unwrap();
+            if let Some(dir) = &output {
+                std::fs::write(dir.join(format!("{operation}-{ty}.text")), code).unwrap();
+            }
+        }
+    }
+}

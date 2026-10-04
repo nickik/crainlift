@@ -560,6 +560,49 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         ValueRegs::two(low.to_reg(), high.to_reg())
     }
 
+    fn sia_select(&mut self, test: Reg, yes: Reg, no: Reg) -> Reg {
+        let dst = self.temp_writable_reg(I32);
+        self.lower_ctx
+            .emit(MachineInst::Select { dst, test, yes, no });
+        dst.to_reg()
+    }
+    fn sia_narrow_shift(&mut self, value: Reg, count: Reg, bits: u8, operation: u8) -> Reg {
+        let normalized = self.temp_writable_reg(I32);
+        let mask = self.temp_writable_reg(I32);
+        let masked = self.temp_writable_reg(I32);
+        let dst = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::Extend {
+            dst: normalized,
+            src: value,
+            signed: operation == 2,
+            from_bits: bits,
+            to_bits: 32,
+        });
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: mask,
+            value: u32::from(bits - 1),
+        });
+        self.lower_ctx.emit(MachineInst::TwoOp {
+            op: TwoOp::And,
+            dst: masked,
+            lhs: count,
+            rhs: mask.to_reg(),
+        });
+        let op = match operation {
+            0 => TwoOp::Shl,
+            1 => TwoOp::Shr,
+            2 => TwoOp::Sar,
+            _ => unreachable!(),
+        };
+        self.lower_ctx.emit(MachineInst::TwoOp {
+            op,
+            dst,
+            lhs: normalized.to_reg(),
+            rhs: masked.to_reg(),
+        });
+        dst.to_reg()
+    }
+
     fn sia_br_table(&mut self, index: Reg, targets: &[MachLabel]) {
         let tmp = self.temp_writable_reg(I32);
         self.lower_ctx.emit(MachineInst::BrTable {

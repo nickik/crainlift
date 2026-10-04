@@ -58,9 +58,8 @@
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_xor dst lhs rhs) dst)))
 
-;; Variable shifts are initially restricted to I32. SIA masks the hardware
-;; shift count to five bits; accepting I8/I16 here without explicit masking
-;; would not implement CLIF's narrower-width semantics for all counts.
+;; I32 shifts use SIA hardware count masking. Narrow shifts below explicitly
+;; mask counts to their width and normalize the operand before shifting.
 (rule (lower (ishl $I32 x y))
       (let ((dst WritableReg (temp_writable_reg $I32))
             (lhs Reg (put_in_reg x))
@@ -360,3 +359,16 @@
 (extern constructor sia_br_table sia_br_table)
 (rule (lower_branch (br_table index _) targets)
       (sia_br_table (put_in_reg index) targets))
+
+(decl sia_select (Reg Reg Reg) Reg)
+(extern constructor sia_select sia_select)
+(rule (lower (select (fits_in_32 (ty_int ty)) c x y))
+      (output (sia_select (sia_trap_test c) (put_in_reg x) (put_in_reg y))))
+(decl sia_narrow_shift (Reg Reg u8 u8) Reg)
+(extern constructor sia_narrow_shift sia_narrow_shift)
+(rule (lower (ishl $I8 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 8 0)))
+(rule (lower (ushr $I8 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 8 1)))
+(rule (lower (sshr $I8 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 8 2)))
+(rule (lower (ishl $I16 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 16 0)))
+(rule (lower (ushr $I16 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 16 1)))
+(rule (lower (sshr $I16 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 16 2)))

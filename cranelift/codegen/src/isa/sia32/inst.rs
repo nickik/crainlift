@@ -281,6 +281,12 @@ pub(crate) enum Inst {
         taken: MachLabel,
         not_taken: MachLabel,
     },
+    Select {
+        dst: Writable<Reg>,
+        test: Reg,
+        yes: Reg,
+        no: Reg,
+    },
     BrTable {
         index: Reg,
         tmp: Writable<Reg>,
@@ -627,6 +633,7 @@ impl Inst {
             Self::LoadConst32 { .. } => 18,
             Self::LoadExtName { .. } => 10,
             Self::BrNz { .. } => 4,
+            Self::Select { .. } => 8,
             Self::Extend { .. } => 6,
             Self::AddImm { .. } | Self::SpAdjust { .. } | Self::StackAddr { .. } => 22,
             Self::LoadStack { .. } | Self::LoadBaseOffset { .. } => 24,
@@ -734,6 +741,12 @@ impl MachInst for Inst {
             Self::SpAdjust { .. } => {}
             Self::StackLowerBoundTrap { limit } => collector.reg_use(limit),
             Self::BrNz { test, .. } => collector.reg_use(test),
+            Self::Select { dst, test, yes, no } => {
+                collector.reg_use(test);
+                collector.reg_use(yes);
+                collector.reg_use(no);
+                collector.reg_def(dst);
+            }
             Self::BrTable { index, tmp, .. } => {
                 collector.reg_use(index);
                 collector.reg_early_def(tmp);
@@ -1217,6 +1230,18 @@ impl MachInstEmit for Inst {
                 code.use_label_at_offset(second, *not_taken, LabelUse::Branch11);
                 code.add_uncond_branch(second, second + 2, *not_taken);
                 put_word(code, encode::b(0).unwrap());
+            }
+            Self::Select { dst, test, yes, no } => {
+                let taken = code.get_label();
+                let done = code.get_label();
+                code.use_label_at_offset(code.cur_offset(), taken, LabelUse::Cond7);
+                put_word(code, encode::bnz(arch_reg(*test), 0).unwrap());
+                put_word(code, encode::mov(arch_reg(dst.to_reg()), arch_reg(*no)));
+                code.use_label_at_offset(code.cur_offset(), done, LabelUse::Branch11);
+                put_word(code, encode::b(0).unwrap());
+                code.bind_label(taken, state.ctrl_plane_mut());
+                put_word(code, encode::mov(arch_reg(dst.to_reg()), arch_reg(*yes)));
+                code.bind_label(done, state.ctrl_plane_mut());
             }
             Self::BrTable {
                 index,
