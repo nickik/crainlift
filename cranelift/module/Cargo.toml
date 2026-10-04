@@ -1,4 +1,5 @@
 [package]
+workspace = "../.."
 name = "cranelift-module"
 version = "0.137.0-dev"
 authors = ["The Cranelift Project Developers"]

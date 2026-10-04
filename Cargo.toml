@@ -14,6 +14,7 @@ members = [
   "cranelift/isle/isle",
   "cranelift/module",
   "cranelift/native",
+  "cranelift/object",
   "cranelift/srcgen",
   "crates/core",
   "vendor/target-lexicon-sia",
@@ -83,6 +84,7 @@ target-lexicon = { path = "vendor/target-lexicon-sia" }
 arbitrary = "1.4.2"
 bumpalo = "3.20.2"
 mutatis = { version = "0.5.2", features = ["alloc", "derive", "check"] }
+object = { version = "0.40.0", default-features = false }
 gimli = { version = "0.33.0", default-features = false, features = ["read"] }
 anyhow = { version = "1.0.103", default-features = false }
 env_logger = "0.11.5"

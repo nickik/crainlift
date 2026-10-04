@@ -1,5 +1,14 @@
 # SIA32 Cranelift Backend TODO
 
+## Local Rust program integration — 2026-10-04
+
+- [x] Restore the relocation-free SIA ELF object writer from the earlier R0 branch and include cranelift-object in the retained workspace.
+- [x] Make the cg_clif-facing packages explicitly inherit this workspace when used as adjacent path dependencies.
+- [x] Pass all 17 object-emission tests, including the private SIA ELF32 identity.
+- [x] Compile a no_std Rust Fibonacci/console program through the current local backend and run it in Lighting with exact result/output checks.
+
+The complete local gate is `../rust-sia/scripts/run-program-local.sh`. Cross-object references still require real SIA relocations and a consuming linker; this milestone remains relocation-free.
+
 ## Goal
 
 Add a native 32-bit SIA backend to this Cranelift fork, initially targeting the frozen SIA32-I integer ISA and the current Forge/Cosmic toolchain. The backend must emit real SIA machine code that executes unchanged in LightingSimulation and, later, on the hardware-derived Lighting CPU.
