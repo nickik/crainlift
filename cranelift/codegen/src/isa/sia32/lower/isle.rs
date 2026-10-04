@@ -306,6 +306,308 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         result.to_reg()
     }
 
+    fn sia_i64_load(&mut self, base: Reg, offset: i32) -> ValueRegs {
+        let low = self.temp_writable_reg(I32);
+        let high = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::LoadBaseOffset {
+            dst: low,
+            base,
+            offset,
+            ty: I32,
+        });
+        self.lower_ctx.emit(MachineInst::LoadBaseOffset {
+            dst: high,
+            base,
+            offset: offset.wrapping_add(4),
+            ty: I32,
+        });
+        ValueRegs::two(low.to_reg(), high.to_reg())
+    }
+
+    fn sia_i64_store(&mut self, value: ValueRegs, base: Reg, offset: i32) -> InstOutput {
+        self.lower_ctx.emit(MachineInst::StoreBaseOffset {
+            src: value.regs()[0],
+            base,
+            offset,
+            ty: I32,
+        });
+        self.lower_ctx.emit(MachineInst::StoreBaseOffset {
+            src: value.regs()[1],
+            base,
+            offset: offset.wrapping_add(4),
+            ty: I32,
+        });
+        smallvec::smallvec![]
+    }
+
+    fn sia_i64_icmp(&mut self, x: ValueRegs, y: ValueRegs, cc: &IntCC) -> Reg {
+        let compare = |this: &mut Self, lhs: Reg, rhs: Reg, cc: IntCC| {
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx.emit(MachineInst::Icmp { dst, cc, lhs, rhs });
+            dst.to_reg()
+        };
+        let (x, y, signed, equal, invert) = match cc {
+            IntCC::Equal => (x, y, false, true, false),
+            IntCC::NotEqual => (x, y, false, true, true),
+            IntCC::SignedLessThan => (x, y, true, false, false),
+            IntCC::UnsignedLessThan => (x, y, false, false, false),
+            IntCC::SignedGreaterThan => (y, x, true, false, false),
+            IntCC::UnsignedGreaterThan => (y, x, false, false, false),
+            IntCC::SignedGreaterThanOrEqual => (x, y, true, false, true),
+            IntCC::UnsignedGreaterThanOrEqual => (x, y, false, false, true),
+            IntCC::SignedLessThanOrEqual => (y, x, true, false, true),
+            IntCC::UnsignedLessThanOrEqual => (y, x, false, false, true),
+        };
+        let high_equal = compare(self, x.regs()[1], y.regs()[1], IntCC::Equal);
+        let low_test = compare(
+            self,
+            x.regs()[0],
+            y.regs()[0],
+            if equal {
+                IntCC::Equal
+            } else {
+                IntCC::UnsignedLessThan
+            },
+        );
+        let combined = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::TwoOp {
+            op: TwoOp::And,
+            dst: combined,
+            lhs: high_equal,
+            rhs: low_test,
+        });
+        let result = if equal {
+            combined.to_reg()
+        } else {
+            let high_less = compare(
+                self,
+                x.regs()[1],
+                y.regs()[1],
+                if signed {
+                    IntCC::SignedLessThan
+                } else {
+                    IntCC::UnsignedLessThan
+                },
+            );
+            let result = self.temp_writable_reg(I32);
+            self.lower_ctx.emit(MachineInst::TwoOp {
+                op: TwoOp::Or,
+                dst: result,
+                lhs: high_less,
+                rhs: combined.to_reg(),
+            });
+            result.to_reg()
+        };
+        if !invert {
+            return result;
+        }
+        let one = self.temp_writable_reg(I32);
+        let inverted = self.temp_writable_reg(I32);
+        self.lower_ctx
+            .emit(MachineInst::LoadConst32 { dst: one, value: 1 });
+        self.lower_ctx.emit(MachineInst::TwoOp {
+            op: TwoOp::Xor,
+            dst: inverted,
+            lhs: result,
+            rhs: one.to_reg(),
+        });
+        inverted.to_reg()
+    }
+
+    fn sia_i64_shift(&mut self, value: ValueRegs, amount: u64, operation: u8) -> ValueRegs {
+        let amount = (amount & 63) as u8;
+        if amount == 0 {
+            return value;
+        }
+        let shift = |this: &mut Self, src: Reg, op: TwoOp, amount: u8| {
+            let dst = this.temp_writable_reg(I32);
+            if amount == 0 {
+                this.lower_ctx.emit(MachineInst::Mov { dst, src });
+            } else {
+                this.lower_ctx.emit(MachineInst::ShiftImm {
+                    op,
+                    dst,
+                    src,
+                    amount,
+                });
+            }
+            dst.to_reg()
+        };
+        let zero = |this: &mut Self| {
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx
+                .emit(MachineInst::LoadConst32 { dst, value: 0 });
+            dst.to_reg()
+        };
+        let low = value.regs()[0];
+        let high = value.regs()[1];
+        let right_op = if operation == 2 {
+            TwoOp::Sar
+        } else {
+            TwoOp::Shr
+        };
+        if amount >= 32 {
+            return if operation == 0 {
+                let high = shift(self, low, TwoOp::Shl, amount - 32);
+                let low = zero(self);
+                ValueRegs::two(low, high)
+            } else {
+                let low = shift(self, high, right_op, amount - 32);
+                let high = if operation == 2 {
+                    shift(self, high, TwoOp::Sar, 31)
+                } else {
+                    zero(self)
+                };
+                ValueRegs::two(low, high)
+            };
+        }
+        let (low, high, mixed, mix_low) = if operation == 0 {
+            (
+                shift(self, low, TwoOp::Shl, amount),
+                shift(self, high, TwoOp::Shl, amount),
+                shift(self, low, TwoOp::Shr, 32 - amount),
+                false,
+            )
+        } else {
+            (
+                shift(self, low, TwoOp::Shr, amount),
+                shift(self, high, right_op, amount),
+                shift(self, high, TwoOp::Shl, 32 - amount),
+                true,
+            )
+        };
+        let dst = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::TwoOp {
+            op: TwoOp::Or,
+            dst,
+            lhs: if mix_low { low } else { high },
+            rhs: mixed,
+        });
+        if mix_low {
+            ValueRegs::two(dst.to_reg(), high)
+        } else {
+            ValueRegs::two(low, dst.to_reg())
+        }
+    }
+
+    fn sia_i64_const(&mut self, value: u64) -> ValueRegs {
+        let low = self.temp_writable_reg(I32);
+        let high = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: low,
+            value: value as u32,
+        });
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: high,
+            value: (value >> 32) as u32,
+        });
+        ValueRegs::two(low.to_reg(), high.to_reg())
+    }
+
+    fn sia_i64_extend(&mut self, src: Reg, signed: bool, from_bits: u8) -> ValueRegs {
+        let low = self.temp_writable_reg(I32);
+        let high = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::Extend {
+            dst: low,
+            src,
+            signed,
+            from_bits,
+            to_bits: 32,
+        });
+        if signed {
+            self.lower_ctx.emit(MachineInst::ShiftImm {
+                op: TwoOp::Sar,
+                dst: high,
+                src: low.to_reg(),
+                amount: 31,
+            });
+        } else {
+            self.lower_ctx.emit(MachineInst::LoadConst32 {
+                dst: high,
+                value: 0,
+            });
+        }
+        ValueRegs::two(low.to_reg(), high.to_reg())
+    }
+
+    fn sia_i64_alu(&mut self, x: ValueRegs, y: ValueRegs, operation: u8) -> ValueRegs {
+        let op = match operation {
+            0 => TwoOp::Sub,
+            1 => TwoOp::Sub,
+            2 => TwoOp::And,
+            3 => TwoOp::Or,
+            4 => TwoOp::Xor,
+            _ => unreachable!(),
+        };
+        let low = self.temp_writable_reg(I32);
+        let high = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(if operation == 0 {
+            MachineInst::Add {
+                dst: low,
+                lhs: x.regs()[0],
+                rhs: y.regs()[0],
+            }
+        } else {
+            MachineInst::TwoOp {
+                op,
+                dst: low,
+                lhs: x.regs()[0],
+                rhs: y.regs()[0],
+            }
+        });
+        if operation <= 1 {
+            let carry = self.temp_writable_reg(I32);
+            let partial_high = self.temp_writable_reg(I32);
+            let (lhs, rhs) = if operation == 0 {
+                (low.to_reg(), x.regs()[0])
+            } else {
+                (x.regs()[0], y.regs()[0])
+            };
+            self.lower_ctx.emit(MachineInst::Icmp {
+                dst: carry,
+                cc: IntCC::UnsignedLessThan,
+                lhs,
+                rhs,
+            });
+            self.lower_ctx.emit(if operation == 0 {
+                MachineInst::Add {
+                    dst: partial_high,
+                    lhs: x.regs()[1],
+                    rhs: y.regs()[1],
+                }
+            } else {
+                MachineInst::TwoOp {
+                    op,
+                    dst: partial_high,
+                    lhs: x.regs()[1],
+                    rhs: y.regs()[1],
+                }
+            });
+            self.lower_ctx.emit(if operation == 0 {
+                MachineInst::Add {
+                    dst: high,
+                    lhs: partial_high.to_reg(),
+                    rhs: carry.to_reg(),
+                }
+            } else {
+                MachineInst::TwoOp {
+                    op,
+                    dst: high,
+                    lhs: partial_high.to_reg(),
+                    rhs: carry.to_reg(),
+                }
+            });
+        } else {
+            self.lower_ctx.emit(MachineInst::TwoOp {
+                op,
+                dst: high,
+                lhs: x.regs()[1],
+                rhs: y.regs()[1],
+            });
+        }
+        ValueRegs::two(low.to_reg(), high.to_reg())
+    }
+
     fn sia_load_const(&mut self, dst: WritableReg, value: u64) -> MInst {
         let value = u32::try_from(value).expect("SIA32 word iconst must fit 32 bits");
         MInst::LoadConst32 { dst, value }

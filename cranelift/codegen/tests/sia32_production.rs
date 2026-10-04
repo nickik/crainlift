@@ -94,12 +94,11 @@ fn integer_constants_use_production_sia32_lowering() {
 }
 
 #[test]
-fn i64_constant_remains_rejected_by_sia32_m5() {
-    let error = compile_iconst(I64, 1).expect_err("SIA32 M5 must not accept I64 lowering");
-    assert!(
-        error.contains("implemented in ISLE"),
-        "unexpected I64 failure: {error}"
-    );
+fn i64_constants_compile_to_native_word_pairs() {
+    for value in [0, 1, -1, 0x1234_5678_9abc_def0i64] {
+        let code = compile_iconst(I64, value).expect("native I64 constant lowering");
+        assert!(!code.is_empty());
+    }
 }
 
 #[test]
