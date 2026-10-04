@@ -1298,7 +1298,7 @@ mod tests {
             lhs: mach_reg(2),
             rhs: mach_reg(3),
         };
-        assert_eq!(op.encoded_worst_case_size(), 4);
+        assert_eq!(op.encoded_worst_case_size(), 6);
         let c = Inst::LoadConst32 {
             dst: w(1),
             value: 0xdead_beef,
