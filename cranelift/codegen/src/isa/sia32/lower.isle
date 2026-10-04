@@ -326,6 +326,12 @@
 (rule 1 (lower (ireduce $I16 x @ (value_type $I64))) (output (value_reg (value_regs_get (put_in_regs x) 0))))
 (rule 1 (lower (ireduce $I32 x @ (value_type $I64))) (output (value_reg (value_regs_get (put_in_regs x) 0))))
 
+(decl sia_i64_variable_shift (ValueRegs ValueRegs u8) ValueRegs)
+(extern constructor sia_i64_variable_shift sia_i64_variable_shift)
+(rule 1 (lower (ishl $I64 x y)) (output (sia_i64_variable_shift (put_in_regs x) (put_in_regs y) 0)))
+(rule 1 (lower (ushr $I64 x y)) (output (sia_i64_variable_shift (put_in_regs x) (put_in_regs y) 1)))
+(rule 1 (lower (sshr $I64 x y)) (output (sia_i64_variable_shift (put_in_regs x) (put_in_regs y) 2)))
+
 (decl sia_i64_shift (ValueRegs u64 u8) ValueRegs)
 (extern constructor sia_i64_shift sia_i64_shift)
 (rule 2 (lower (ishl $I64 x (u64_from_iconst amount))) (output (sia_i64_shift (put_in_regs x) amount 0)))
@@ -372,3 +378,7 @@
 (rule (lower (ishl $I16 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 16 0)))
 (rule (lower (ushr $I16 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 16 1)))
 (rule (lower (sshr $I16 x y)) (output (sia_narrow_shift (put_in_reg x) (put_in_reg y) 16 2)))
+
+(decl sia_umulhi (Reg Reg) Reg)
+(extern constructor sia_umulhi sia_umulhi)
+(rule (lower (umulhi $I32 x y)) (output (sia_umulhi (put_in_reg x) (put_in_reg y))))

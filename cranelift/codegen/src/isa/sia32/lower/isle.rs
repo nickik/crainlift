@@ -415,6 +415,75 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         inverted.to_reg()
     }
 
+    fn sia_umulhi(&mut self, lhs: Reg, rhs: Reg) -> Reg {
+        let dst = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::TwoOp {
+            op: TwoOp::MulUHigh,
+            dst,
+            lhs,
+            rhs,
+        });
+        dst.to_reg()
+    }
+
+    fn sia_i64_variable_shift(
+        &mut self,
+        value: ValueRegs,
+        count: ValueRegs,
+        operation: u8,
+    ) -> ValueRegs {
+        let constant = |this: &mut Self, value: u32| {
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx.emit(MachineInst::LoadConst32 { dst, value });
+            dst.to_reg()
+        };
+        let binary = |this: &mut Self, op: TwoOp, lhs: Reg, rhs: Reg| {
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx
+                .emit(MachineInst::TwoOp { op, dst, lhs, rhs });
+            dst.to_reg()
+        };
+        let zero = constant(self, 0);
+        let mask = constant(self, 31);
+        let thirty_two = constant(self, 32);
+        // CLIF counts wrap modulo 64. The upper count word cannot affect the result.
+        let amount = binary(self, TwoOp::And, count.regs()[0], mask);
+        let upper_half = binary(self, TwoOp::And, count.regs()[0], thirty_two);
+        let inverse = binary(self, TwoOp::Sub, thirty_two, amount);
+        let low = value.regs()[0];
+        let high = value.regs()[1];
+        if operation == 0 {
+            let shifted_low = binary(self, TwoOp::Shl, low, amount);
+            let shifted_high = binary(self, TwoOp::Shl, high, amount);
+            let cross = binary(self, TwoOp::Shr, low, inverse);
+            // The native shift count wraps modulo 32, so discard the cross word at zero.
+            let cross = self.sia_select(amount, cross, zero);
+            let mixed_high = binary(self, TwoOp::Or, shifted_high, cross);
+            let out_low = self.sia_select(upper_half, zero, shifted_low);
+            let out_high = self.sia_select(upper_half, shifted_low, mixed_high);
+            ValueRegs::two(out_low, out_high)
+        } else {
+            let right_op = if operation == 2 {
+                TwoOp::Sar
+            } else {
+                TwoOp::Shr
+            };
+            let shifted_low = binary(self, TwoOp::Shr, low, amount);
+            let shifted_high = binary(self, right_op, high, amount);
+            let cross = binary(self, TwoOp::Shl, high, inverse);
+            let cross = self.sia_select(amount, cross, zero);
+            let mixed_low = binary(self, TwoOp::Or, shifted_low, cross);
+            let fill = if operation == 2 {
+                binary(self, TwoOp::Sar, high, mask)
+            } else {
+                zero
+            };
+            let out_low = self.sia_select(upper_half, shifted_high, mixed_low);
+            let out_high = self.sia_select(upper_half, fill, shifted_high);
+            ValueRegs::two(out_low, out_high)
+        }
+    }
+
     fn sia_i64_shift(&mut self, value: ValueRegs, amount: u64, operation: u8) -> ValueRegs {
         let amount = (amount & 63) as u8;
         if amount == 0 {
