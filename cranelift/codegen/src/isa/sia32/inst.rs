@@ -50,6 +50,7 @@ pub(crate) enum TwoOp {
     BInv,
     BExt,
     Mul,
+    MulUHigh,
     Div,
     DivU,
     Rem,
@@ -279,6 +280,11 @@ pub(crate) enum Inst {
         test: Reg,
         taken: MachLabel,
         not_taken: MachLabel,
+    },
+    BrTable {
+        index: Reg,
+        tmp: Writable<Reg>,
+        targets: Vec<MachLabel>,
     },
     Call {
         info: Box<CallInfo<ExternalName>>,
@@ -728,6 +734,10 @@ impl MachInst for Inst {
             Self::SpAdjust { .. } => {}
             Self::StackLowerBoundTrap { limit } => collector.reg_use(limit),
             Self::BrNz { test, .. } => collector.reg_use(test),
+            Self::BrTable { index, tmp, .. } => {
+                collector.reg_use(index);
+                collector.reg_early_def(tmp);
+            }
             Self::Call { info } => collect_call_operands(&mut **info, collector),
             Self::CallInd { info } => {
                 collector.reg_use(&mut info.dest);
@@ -746,7 +756,7 @@ impl MachInst for Inst {
     fn is_term(&self) -> MachTerminator {
         match self {
             Self::Rets { .. } | Self::Ret => MachTerminator::Ret,
-            Self::Jump { .. } | Self::BrNz { .. } => MachTerminator::Branch,
+            Self::Jump { .. } | Self::BrNz { .. } | Self::BrTable { .. } => MachTerminator::Branch,
             _ => MachTerminator::None,
         }
     }
@@ -997,6 +1007,7 @@ impl MachInstEmit for Inst {
                     TwoOp::BInv => encode::binv(d, r),
                     TwoOp::BExt => encode::bext(d, r),
                     TwoOp::Mul => encode::mul(d, r),
+                    TwoOp::MulUHigh => encode::mulhu(d, r),
                     TwoOp::Div => encode::div(d, r),
                     TwoOp::DivU => encode::divu(d, r),
                     TwoOp::Rem => encode::rem(d, r),
@@ -1207,6 +1218,40 @@ impl MachInstEmit for Inst {
                 code.add_uncond_branch(second, second + 2, *not_taken);
                 put_word(code, encode::b(0).unwrap());
             }
+            Self::BrTable {
+                index,
+                tmp,
+                targets,
+            } => {
+                // Default is first, followed by the indexed destinations.
+                // This deliberately uses a linear comparison chain. Emit
+                // islands between cases so large tables never overrun short
+                // conditional-branch fixup deadlines.
+                for (value, target) in targets[1..].iter().enumerate() {
+                    if code.island_needed(26) {
+                        let after = code.get_label();
+                        let site = code.cur_offset();
+                        code.use_label_at_offset(site, after, LabelUse::Branch11);
+                        code.add_uncond_branch(site, site + 2, after);
+                        put_word(code, encode::b(0).unwrap());
+                        code.emit_island(28, state.ctrl_plane_mut());
+                        code.bind_label(after, state.ctrl_plane_mut());
+                    }
+                    emit_const32(code, arch_reg(tmp.to_reg()), value as u32);
+                    put_word(code, encode::mov(regs::Reg::SCRATCH, arch_reg(*index)));
+                    put_word(
+                        code,
+                        encode::cmpeq(regs::Reg::SCRATCH, arch_reg(tmp.to_reg())),
+                    );
+                    let site = code.cur_offset();
+                    code.use_label_at_offset(site, *target, LabelUse::Cond7);
+                    put_word(code, encode::bnz(regs::Reg::SCRATCH, 0).unwrap());
+                }
+                let site = code.cur_offset();
+                code.use_label_at_offset(site, targets[0], LabelUse::Branch11);
+                code.add_uncond_branch(site, site + 2, targets[0]);
+                put_word(code, encode::b(0).unwrap());
+            }
             Self::Call { info } => emit_direct_call(code, state, info),
             Self::CallInd { info } => {
                 put_word(code, encode::callr(arch_reg(info.dest)));
@@ -1214,7 +1259,11 @@ impl MachInstEmit for Inst {
             }
             Self::Ret => put_word(code, encode::ret()),
         }
-        debug_assert!(code.cur_offset() - start <= Self::worst_case_size());
+        // BrTable checks island deadlines between bounded comparison chunks.
+        debug_assert!(
+            matches!(self, Self::BrTable { .. })
+                || code.cur_offset() - start <= Self::worst_case_size()
+        );
     }
 
     fn pretty_print_inst(&self, _state: &mut Self::State) -> String {

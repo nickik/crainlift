@@ -531,6 +531,44 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         ValueRegs::two(low.to_reg(), high.to_reg())
     }
 
+    fn sia_i64_mul(&mut self, x: ValueRegs, y: ValueRegs) -> ValueRegs {
+        let low = self.temp_writable_reg(I32);
+        let upper_low_product = self.temp_writable_reg(I32);
+        let cross_a = self.temp_writable_reg(I32);
+        let cross_b = self.temp_writable_reg(I32);
+        let partial = self.temp_writable_reg(I32);
+        let high = self.temp_writable_reg(I32);
+        for (dst, lhs, rhs, op) in [
+            (low, x.regs()[0], y.regs()[0], TwoOp::Mul),
+            (upper_low_product, x.regs()[0], y.regs()[0], TwoOp::MulUHigh),
+            (cross_a, x.regs()[1], y.regs()[0], TwoOp::Mul),
+            (cross_b, x.regs()[0], y.regs()[1], TwoOp::Mul),
+        ] {
+            self.lower_ctx
+                .emit(MachineInst::TwoOp { op, dst, lhs, rhs });
+        }
+        self.lower_ctx.emit(MachineInst::Add {
+            dst: partial,
+            lhs: upper_low_product.to_reg(),
+            rhs: cross_a.to_reg(),
+        });
+        self.lower_ctx.emit(MachineInst::Add {
+            dst: high,
+            lhs: partial.to_reg(),
+            rhs: cross_b.to_reg(),
+        });
+        ValueRegs::two(low.to_reg(), high.to_reg())
+    }
+
+    fn sia_br_table(&mut self, index: Reg, targets: &[MachLabel]) {
+        let tmp = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::BrTable {
+            index,
+            tmp,
+            targets: targets.to_vec(),
+        });
+    }
+
     fn sia_i64_alu(&mut self, x: ValueRegs, y: ValueRegs, operation: u8) -> ValueRegs {
         let op = match operation {
             0 => TwoOp::Sub,

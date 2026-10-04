@@ -520,3 +520,73 @@ fn narrow_and_word_integer_negation_compile() {
         assert!(!compile_function(func).unwrap().is_empty());
     }
 }
+
+#[test]
+fn i64_multiplication_and_branch_tables_compile_natively() {
+    use cranelift_codegen::ir::{AbiParam, JumpTableData};
+    let mut sig = Signature::new(CallConv::SystemV);
+    sig.params.extend([AbiParam::new(I64), AbiParam::new(I64)]);
+    sig.returns.push(AbiParam::new(I64));
+    let mut func = Function::with_name_signature(UserFuncName::testcase("mul64"), sig);
+    let block = func.dfg.make_block();
+    let a = func.dfg.append_block_param(block, I64);
+    let b = func.dfg.append_block_param(block, I64);
+    func.layout.append_block(block);
+    let mut pos = FuncCursor::new(&mut func).at_bottom(block);
+    let result = pos.ins().imul(a, b);
+    pos.ins().return_(&[result]);
+    assert!(!compile_function(func).unwrap().is_empty());
+
+    for size in [0, 1, 2, 3, 64, 256] {
+        let mut sig = Signature::new(CallConv::SystemV);
+        sig.params.push(AbiParam::new(I32));
+        sig.returns.push(AbiParam::new(I32));
+        let mut func = Function::with_name_signature(UserFuncName::testcase("switch"), sig);
+        let entry = func.dfg.make_block();
+        func.layout.append_block(entry);
+        let index = func.dfg.append_block_param(entry, I32);
+        let default = func.dfg.make_block();
+        func.layout.append_block(default);
+        let cases = (0..size)
+            .map(|_| {
+                let block = func.dfg.make_block();
+                func.layout.append_block(block);
+                block
+            })
+            .collect::<Vec<_>>();
+        let default_call = func.dfg.block_call(default, &[]);
+        let targets = cases
+            .iter()
+            .enumerate()
+            .map(|(index, block)| {
+                func.dfg.block_call(
+                    if size == 3 && index == 2 {
+                        cases[0]
+                    } else {
+                        *block
+                    },
+                    &[],
+                )
+            })
+            .collect::<Vec<_>>();
+        let table = func.create_jump_table(JumpTableData::new(default_call, &targets));
+        FuncCursor::new(&mut func)
+            .at_bottom(entry)
+            .ins()
+            .br_table(index, table);
+        for (value, block) in cases.into_iter().enumerate() {
+            let mut pos = FuncCursor::new(&mut func).at_bottom(block);
+            let result = pos.ins().iconst(I32, 0x10000000 + value as i64 * 17);
+            pos.ins().return_(&[result]);
+        }
+        let mut pos = FuncCursor::new(&mut func).at_bottom(default);
+        let result = pos.ins().iconst(I32, -1);
+        pos.ins().return_(&[result]);
+        let code = compile_function(func).unwrap();
+        if let Some(dir) = std::env::var_os("SIA32_SWITCH_OUTPUT") {
+            let dir = std::path::PathBuf::from(dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(format!("switch-{size}.text")), code).unwrap();
+        }
+    }
+}

@@ -351,3 +351,12 @@
       (sia_i64_store (put_in_regs src) (put_in_reg addr) offset))
 (rule 1 (lower (icmp _ cc x @ (value_type $I64) y))
       (output (value_reg (sia_i64_icmp (put_in_regs x) (put_in_regs y) cc))))
+
+(decl sia_i64_mul (ValueRegs ValueRegs) ValueRegs)
+(extern constructor sia_i64_mul sia_i64_mul)
+(rule 1 (lower (imul $I64 x y)) (output (sia_i64_mul (put_in_regs x) (put_in_regs y))))
+
+(decl sia_br_table (Reg MachLabelSlice) Unit)
+(extern constructor sia_br_table sia_br_table)
+(rule (lower_branch (br_table index _) targets)
+      (sia_br_table (put_in_reg index) targets))
