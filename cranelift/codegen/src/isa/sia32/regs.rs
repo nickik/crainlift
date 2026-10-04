@@ -129,8 +129,8 @@ pub fn writable_scratch_reg() -> Writable<MachReg> {
 
 /// Initial SIA32 register-allocation environment.
 ///
-/// Caller-saved r1-r8 are preferred. Callee-saved r9-r11/r15 are the second
-/// tier. r0, r12, r13 and r14 are fixed/reserved and absent from regalloc.
+/// Caller-saved r1-r8 are preferred. Callee-saved r9-r11 are the second
+/// tier. r0, r12, r13, r14 and the frame base r15 are reserved.
 pub const fn create_reg_environment() -> MachineEnv {
     let preferred_regs_by_class = [
         PRegSet::empty()
@@ -145,10 +145,7 @@ pub const fn create_reg_environment() -> MachineEnv {
         PRegSet::empty(),
         PRegSet::empty(),
     ];
-    // r15 is reserved as the stable frame base for dynamic stack allocation.
-    // Stack slots are SP-relative and the prologue does not establish a fixed
-    // frame pointer, so withholding r15 needlessly reduces the allocator to
-    // eleven registers and makes call-heavy generated code unallocatable.
+    // r15 remains the stable frame base across dynamic stack allocation.
     let non_preferred_regs_by_class = [
         PRegSet::empty().with(preg(9)).with(preg(10)).with(preg(11)),
         PRegSet::empty(),

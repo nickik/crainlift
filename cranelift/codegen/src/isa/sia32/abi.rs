@@ -289,6 +289,17 @@ impl ABIMachineSpec for Sia32MachineDeps {
             .copied()
             .filter(|reg| matches!(reg.to_reg().hw_enc(), 9..=11 | 15))
             .collect::<Vec<_>>();
+        // Every non-empty frame writes the reserved FP even when regalloc
+        // did not report it. Preserve the caller's FP across nested calls.
+        if function_calls == FunctionCalls::Regular
+            || stackslots_size != 0
+            || fixed_frame_storage_size != 0
+            || outgoing_args_size != 0
+            || !clobbered_callee_saves.is_empty()
+        {
+            clobbered_callee_saves
+                .push(regs::writable_frame_reg().map(|reg| reg.to_real_reg().unwrap()));
+        }
         clobbered_callee_saves.sort_by_key(|reg| reg.to_reg().hw_enc());
         clobbered_callee_saves.dedup_by_key(|reg| reg.to_reg().hw_enc());
 
@@ -384,10 +395,6 @@ impl ABIMachineSpec for Sia32MachineDeps {
         out.push(Inst::SpAdjust {
             amount: -(stack_size as i32),
         });
-        out.push(Inst::Mov {
-            dst: regs::writable_frame_reg(),
-            src: regs::stack_reg(),
-        });
         // Keep callee saves above the fixed/outgoing frame so StackAMode::Slot
         // offsets remain based at the current SP and never address above the caller SP.
         let save_base = frame_layout.fixed_frame_storage_size
@@ -409,6 +416,10 @@ impl ABIMachineSpec for Sia32MachineDeps {
                 ty: I32,
             });
         }
+        out.push(Inst::Mov {
+            dst: regs::writable_frame_reg(),
+            src: regs::stack_reg(),
+        });
         out
     }
 
@@ -555,11 +566,28 @@ mod tests {
     fn machine_environment_excludes_fixed_registers() {
         let flags = settings::Flags::new(settings::builder());
         let env = Sia32MachineDeps::get_machine_env(&flags, isa::CallConv::SystemV);
-        for n in [0, 12, 13, 14] {
+        for n in [0, 12, 13, 14, 15] {
             let preg = regs::preg(n);
             assert!(!env.preferred_regs_by_class[0].contains(preg));
             assert!(!env.non_preferred_regs_by_class[0].contains(preg));
         }
+    }
+
+    #[test]
+    fn reserved_frame_pointer_is_saved_before_replacement() {
+        let flags = settings::Flags::new(settings::builder());
+        let sig = Signature::new(isa::CallConv::SystemV);
+        let frame = Sia32MachineDeps::compute_frame_layout(
+            isa::CallConv::SystemV, &flags, &sig, &[],
+            FunctionCalls::Regular, 0, 0, 0, 16, 0,
+        );
+        assert!(frame.clobbered_callee_saves.iter().any(|r| r.to_reg().hw_enc() == 15));
+        let instructions = Sia32MachineDeps::gen_clobber_save(isa::CallConv::SystemV, &flags, &frame);
+        let save = instructions.iter().position(|inst| matches!(inst,
+            Inst::StoreBaseOffset { src, .. } if *src == regs::frame_reg())).unwrap();
+        let replacement = instructions.iter().position(|inst| matches!(inst,
+            Inst::Mov { dst, .. } if dst.to_reg() == regs::frame_reg())).unwrap();
+        assert!(save < replacement);
     }
 
     #[test]
