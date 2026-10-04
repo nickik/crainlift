@@ -288,6 +288,12 @@
 
 
 ;;;; Integer comparisons ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(decl sia_narrow_icmp (IntCC Reg Reg u8) Reg)
+(extern constructor sia_narrow_icmp sia_narrow_icmp)
+(rule 1 (lower (icmp _ cc x @ (value_type $I8) y))
+      (output (sia_narrow_icmp cc (put_in_reg x) (put_in_reg y) 8)))
+(rule 1 (lower (icmp _ cc x @ (value_type $I16) y))
+      (output (sia_narrow_icmp cc (put_in_reg x) (put_in_reg y) 16)))
 (rule (lower (icmp _ cc x @ (value_type (fits_in_32 (ty_int _))) y))
       (let ((dst WritableReg (temp_writable_reg $I32))
             (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
@@ -411,3 +417,8 @@
 (rule (lower (func_addr $I32 (func_ref_data _ name _ _)))
       (let ((dst WritableReg (temp_writable_reg $I32)))
         (sia_emit_result (sia_load_ext_name dst (box_external_name name) 0) dst)))
+
+(decl sia_i64_divrem (ValueRegs ValueRegs bool) ValueRegs)
+(extern constructor sia_i64_divrem sia_i64_divrem)
+(rule 1 (lower (udiv $I64 x y)) (output (sia_i64_divrem (put_in_regs x) (put_in_regs y) false)))
+(rule 1 (lower (urem $I64 x y)) (output (sia_i64_divrem (put_in_regs x) (put_in_regs y) true)))

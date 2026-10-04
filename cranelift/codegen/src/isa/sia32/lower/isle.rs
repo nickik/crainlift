@@ -654,6 +654,88 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
         ValueRegs::two(low.to_reg(), high.to_reg())
     }
 
+    fn sia_i64_divrem(&mut self, x: ValueRegs, y: ValueRegs, remainder: bool) -> ValueRegs {
+        let zero = self.temp_writable_reg(I32);
+        let one = self.temp_writable_reg(I32);
+        let divisor_test = self.temp_writable_reg(I32);
+        self.lower_ctx.emit(MachineInst::LoadConst32 {
+            dst: zero,
+            value: 0,
+        });
+        self.lower_ctx
+            .emit(MachineInst::LoadConst32 { dst: one, value: 1 });
+        self.lower_ctx.emit(MachineInst::TwoOp {
+            op: TwoOp::Or,
+            dst: divisor_test,
+            lhs: y.regs()[0],
+            rhs: y.regs()[1],
+        });
+        self.lower_ctx.emit(MachineInst::TrapIfZ {
+            test: divisor_test.to_reg(),
+            code: TrapCode::INTEGER_DIVISION_BY_ZERO,
+        });
+        let binary = |this: &mut Self, op: TwoOp, lhs: Reg, rhs: Reg| {
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx
+                .emit(MachineInst::TwoOp { op, dst, lhs, rhs });
+            dst.to_reg()
+        };
+        let shift = |this: &mut Self, src: Reg, amount: u8| {
+            if amount == 0 {
+                return src;
+            }
+            let dst = this.temp_writable_reg(I32);
+            this.lower_ctx.emit(MachineInst::ShiftImm {
+                op: TwoOp::Shr,
+                dst,
+                src,
+                amount,
+            });
+            dst.to_reg()
+        };
+        let mut residual = ValueRegs::two(zero.to_reg(), zero.to_reg());
+        let mut quotient = [zero.to_reg(), zero.to_reg()];
+        // Restoring division consumes exactly 64 dividend bits. Unroll the bounded
+        // integer algorithm so ordinary register allocation can spill its temporaries.
+        for bit_index in (0..64u8).rev() {
+            // A shifted residual can require 65 bits when the divisor has its top bit set.
+            let carry = shift(self, residual.regs()[1], 31);
+            let shifted = self.sia_i64_shift(residual, 1, 0);
+            let dividend_word = x.regs()[usize::from(bit_index / 32)];
+            let bit = shift(self, dividend_word, bit_index & 31);
+            let bit = binary(self, TwoOp::And, bit, one.to_reg());
+            let low = binary(self, TwoOp::Or, shifted.regs()[0], bit);
+            let shifted = ValueRegs::two(low, shifted.regs()[1]);
+            let greater_equal = self.sia_i64_icmp(shifted, y, &IntCC::UnsignedGreaterThanOrEqual);
+            let subtract = binary(self, TwoOp::Or, carry, greater_equal);
+            let trial = self.sia_i64_alu(shifted, y, 1);
+            let low = self.sia_select(subtract, trial.regs()[0], shifted.regs()[0]);
+            let high = self.sia_select(subtract, trial.regs()[1], shifted.regs()[1]);
+            residual = ValueRegs::two(low, high);
+            if !remainder {
+                let quotient_bit = if bit_index & 31 == 0 {
+                    subtract
+                } else {
+                    let dst = self.temp_writable_reg(I32);
+                    self.lower_ctx.emit(MachineInst::ShiftImm {
+                        op: TwoOp::Shl,
+                        dst,
+                        src: subtract,
+                        amount: bit_index & 31,
+                    });
+                    dst.to_reg()
+                };
+                let word = usize::from(bit_index / 32);
+                quotient[word] = binary(self, TwoOp::Or, quotient[word], quotient_bit);
+            }
+        }
+        if remainder {
+            residual
+        } else {
+            ValueRegs::two(quotient[0], quotient[1])
+        }
+    }
+
     fn sia_i64_umulhi(&mut self, x: ValueRegs, y: ValueRegs) -> ValueRegs {
         let multiply = |this: &mut Self, lhs: Reg, rhs: Reg, op: TwoOp| {
             let dst = this.temp_writable_reg(I32);
@@ -947,6 +1029,35 @@ impl generated_code::Context for Sia32IsleContext<'_, '_> {
             lhs,
             rhs,
         }
+    }
+
+    fn sia_narrow_icmp(&mut self, cc: &IntCC, lhs: Reg, rhs: Reg, bits: u8) -> Reg {
+        let signed = matches!(
+            cc,
+            IntCC::SignedLessThan
+                | IntCC::SignedLessThanOrEqual
+                | IntCC::SignedGreaterThan
+                | IntCC::SignedGreaterThanOrEqual
+        );
+        let left = self.temp_writable_reg(I32);
+        let right = self.temp_writable_reg(I32);
+        let dst = self.temp_writable_reg(I32);
+        for (dst, src) in [(left, lhs), (right, rhs)] {
+            self.lower_ctx.emit(MachineInst::Extend {
+                dst,
+                src,
+                signed,
+                from_bits: bits,
+                to_bits: 32,
+            });
+        }
+        self.lower_ctx.emit(MachineInst::Icmp {
+            dst,
+            cc: *cc,
+            lhs: left.to_reg(),
+            rhs: right.to_reg(),
+        });
+        dst.to_reg()
     }
 
     fn sia_extend(
