@@ -110,6 +110,10 @@
 (rule (lower (ireduce $I16 x @ (value_type $I32))) (output_value x))
 
 
+(rule (lower (symbol_value $I32 (symbol_value_data name _ offset)))
+      (let ((dst WritableReg (temp_writable_reg $I32)))
+        (sia_emit_result (sia_load_ext_name dst (box_external_name name) offset) dst)))
+
 ;;;; Dynamic stack allocation ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Runtime allocation grows the SIA32 stack downward. The generic IR operation
@@ -122,6 +126,17 @@
             (_ Unit (emit (sia_sub next (writable_reg_to_reg saved) amount)))
             (_ Unit (emit (sia_m_gpr_write (writable_reg_to_reg next) 13))))
         (output (value_reg (writable_reg_to_reg next)))))
+
+;; Release a prior runtime allocation by moving the architectural stack
+;; pointer upward by the same byte count.
+(rule (lower (stack_free_dynamic size))
+      (let ((saved WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_m_gpr_read saved 13)))
+            (amount Reg (put_in_reg size))
+            (next WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_add next (writable_reg_to_reg saved) amount))))
+        (side_effect (SideEffectNoResult.Inst
+          (sia_m_gpr_write (writable_reg_to_reg next) 13)))))
 
 ;;;; Stack addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -238,39 +253,10 @@
 
 
 ;;;; Integer comparisons ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(decl rec sia_icmp_result (IntCC Value Value) InstOutput)
-(rule (sia_icmp_result (IntCC.Equal) x y)
-      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
-        (sia_emit_result (sia_cmpeq dst lhs rhs) dst)))
-(rule (sia_icmp_result (IntCC.NotEqual) x y)
-      (let ((eq WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y))
-            (_ Unit (emit (sia_cmpeq eq lhs rhs))) (one WritableReg (temp_writable_reg $I32))
-            (_ Unit (emit (sia_load_const one 1))) (dst WritableReg (temp_writable_reg $I32)))
-        (sia_emit_result (sia_xor dst (writable_reg_to_reg eq) (writable_reg_to_reg one)) dst)))
-(rule (sia_icmp_result (IntCC.SignedLessThan) x y)
-      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
-        (sia_emit_result (sia_cmplt dst lhs rhs) dst)))
-(rule (sia_icmp_result (IntCC.UnsignedLessThan) x y)
-      (let ((dst WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
-        (sia_emit_result (sia_cmpltu dst lhs rhs) dst)))
-(rule (sia_icmp_result (IntCC.SignedGreaterThan) x y) (sia_icmp_result (IntCC.SignedLessThan) y x))
-(rule (sia_icmp_result (IntCC.UnsignedGreaterThan) x y) (sia_icmp_result (IntCC.UnsignedLessThan) y x))
-(rule (sia_icmp_result (IntCC.SignedGreaterThanOrEqual) x y)
-      (sia_icmp_result (IntCC.SignedLessThanOrEqual) y x))
-(rule (sia_icmp_result (IntCC.UnsignedGreaterThanOrEqual) x y)
-      (sia_icmp_result (IntCC.UnsignedLessThanOrEqual) y x))
-(rule (sia_icmp_result (IntCC.SignedLessThanOrEqual) x y)
-      (let ((gt WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg y)) (rhs Reg (put_in_reg x))
-            (_ Unit (emit (sia_cmplt gt lhs rhs))) (one WritableReg (temp_writable_reg $I32))
-            (_ Unit (emit (sia_load_const one 1))) (dst WritableReg (temp_writable_reg $I32)))
-        (sia_emit_result (sia_xor dst (writable_reg_to_reg gt) (writable_reg_to_reg one)) dst)))
-(rule (sia_icmp_result (IntCC.UnsignedLessThanOrEqual) x y)
-      (let ((gt WritableReg (temp_writable_reg $I32)) (lhs Reg (put_in_reg y)) (rhs Reg (put_in_reg x))
-            (_ Unit (emit (sia_cmpltu gt lhs rhs))) (one WritableReg (temp_writable_reg $I32))
-            (_ Unit (emit (sia_load_const one 1))) (dst WritableReg (temp_writable_reg $I32)))
-        (sia_emit_result (sia_xor dst (writable_reg_to_reg gt) (writable_reg_to_reg one)) dst)))
-(rule (lower (icmp (fits_in_32 (ty_int _)) cc x y)) (sia_icmp_result cc x y))
-
+(rule (lower (icmp (fits_in_32 (ty_int _)) cc x y))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (lhs Reg (put_in_reg x)) (rhs Reg (put_in_reg y)))
+        (sia_emit_result (sia_icmp dst cc lhs rhs) dst)))
 
 ;;;; Multiply / divide / remainder ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (rule (lower (imul (fits_in_32 (ty_int _)) x y))
