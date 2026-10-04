@@ -286,6 +286,7 @@ fn into_machine_inst(inst: &MInst) -> MachineInst {
         MInst::Wfi {} => MachineInst::Wfi,
         MInst::SyncI {} => MachineInst::SyncI,
         MInst::SoftwareTrap { code } => MachineInst::SoftwareTrap { code: *code },
+        MInst::Udf { code } => MachineInst::Udf { code: *code },
     }
 }
 

@@ -111,6 +111,9 @@ pub(crate) enum Inst {
     SoftwareTrap {
         code: u8,
     },
+    Udf {
+        code: ir::TrapCode,
+    },
     TrapIfNz {
         test: Reg,
         code: ir::TrapCode,
@@ -625,6 +628,8 @@ impl Inst {
             Self::Call { .. } => 12,
             Self::CallInd { .. } => 2,
             Self::StackLowerBoundTrap { .. } => 12,
+            Self::TrapIfNz { .. } => 6,
+            Self::TrapIfZ { .. } => 4,
             Self::Args { .. } | Self::Rets { .. } | Self::DummyUse { .. } => 0,
             _ => 2,
         }
@@ -634,7 +639,7 @@ impl Inst {
 impl MachInst for Inst {
     type LabelUse = LabelUse;
     type ABIMachineSpec = Sia32MachineDeps;
-    const TRAP_OPCODE: &'static [u8] = &[0x0f, 0xc0];
+    const TRAP_OPCODE: &'static [u8] = &[0x00, 0xf8];
 
     fn get_operands(&mut self, collector: &mut impl OperandVisitor) {
         match self {
@@ -651,6 +656,7 @@ impl MachInst for Inst {
             Self::DummyUse { reg } => collector.reg_use(reg),
             Self::Nop
             | Self::SoftwareTrap { .. }
+            | Self::Udf { .. }
             | Self::Fence
             | Self::SRet
             | Self::TlbFence
@@ -745,7 +751,7 @@ impl MachInst for Inst {
         }
     }
     fn is_trap(&self) -> bool {
-        false
+        matches!(self, Self::Udf { .. })
     }
     fn is_args(&self) -> bool {
         matches!(self, Self::Args { .. })
@@ -815,7 +821,7 @@ impl MachInst for Inst {
     fn is_safepoint(&self) -> bool {
         matches!(
             self,
-            Self::SoftwareTrap { .. } | Self::Call { .. } | Self::CallInd { .. }
+            Self::SoftwareTrap { .. } | Self::Udf { .. } | Self::Call { .. } | Self::CallInd { .. }
         )
     }
     fn function_alignment() -> FunctionAlignment {
@@ -905,7 +911,16 @@ impl MachInstEmit for Inst {
                 code,
                 encode::trap(*trap_code).expect("backend trap code must be encodable"),
             ),
-            Self::TrapIfNz { test, code: _ } => {
+            Self::Udf { code: trap_code } => {
+                code.add_trap(*trap_code);
+                // SIA32-I rejects the F primary; SIA32-P reserves SYSOP 8.
+                // A compiler fault must not be encoded as a userspace syscall.
+                put_word(code, 0xf800);
+            }
+            Self::TrapIfNz {
+                test,
+                code: trap_code,
+            } => {
                 let trap = code.get_label();
                 let done = code.get_label();
                 let cond_at = code.cur_offset();
@@ -916,15 +931,20 @@ impl MachInstEmit for Inst {
                 code.add_uncond_branch(skip_at, skip_at + 2, done);
                 put_word(code, encode::b(0).unwrap());
                 code.bind_label(trap, state.ctrl_plane_mut());
-                put_word(code, encode::trap(0).unwrap());
+                code.add_trap(*trap_code);
+                put_word(code, 0xf800);
                 code.bind_label(done, state.ctrl_plane_mut());
             }
-            Self::TrapIfZ { test, code: _ } => {
+            Self::TrapIfZ {
+                test,
+                code: trap_code,
+            } => {
                 let done = code.get_label();
                 let branch_at = code.cur_offset();
                 code.use_label_at_offset(branch_at, done, LabelUse::Cond7);
                 put_word(code, encode::bnz(arch_reg(*test), 0).unwrap());
-                put_word(code, encode::trap(0).unwrap());
+                code.add_trap(*trap_code);
+                put_word(code, 0xf800);
                 code.bind_label(done, state.ctrl_plane_mut());
             }
             Self::Mov { dst, src } => {
@@ -1307,7 +1327,7 @@ mod tests {
     }
     #[test]
     fn trap_and_nop_bytes_are_exact() {
-        assert_eq!(Inst::TRAP_OPCODE, &[0x0f, 0xc0]);
+        assert_eq!(Inst::TRAP_OPCODE, &[0x00, 0xf8]);
         assert_eq!(Inst::gen_nop_units(), vec![vec![0xff, 0xcf]]);
     }
 }

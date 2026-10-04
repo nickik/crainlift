@@ -111,6 +111,7 @@
     (Wfi)
     (SyncI)
     (SoftwareTrap (code u8))
+    (Udf (code TrapCode))
     (TrapIfNz (test Reg) (code TrapCode))
     (TrapIfZ (test Reg) (code TrapCode))
     (Call (info BoxCallInfo))

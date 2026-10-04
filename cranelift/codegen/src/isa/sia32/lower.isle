@@ -33,6 +33,13 @@
             (rhs Reg (put_in_reg y)))
         (sia_emit_result (sia_sub dst lhs rhs) dst)))
 
+(rule (lower (ineg (fits_in_32 (ty_int ty)) x))
+      (let ((dst WritableReg (temp_writable_reg ty))
+            (zero WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_load_const zero 0)))
+            (src Reg (put_in_reg x)))
+        (sia_emit_result (sia_sub dst (writable_reg_to_reg zero) src) dst)))
+
 (rule (lower (band (fits_in_32 (ty_int ty)) x y))
       (let ((dst WritableReg (temp_writable_reg ty))
             (lhs Reg (put_in_reg x))
@@ -234,12 +241,32 @@
       (side_effect (SideEffectNoResult.Inst (sia_fence))))
 
 
+;;;; Generic compiler faults (distinct from architectural sia_trap).
+(rule (lower (trap code))
+      (side_effect (SideEffectNoResult.Inst (MInst.Udf code))))
+
+(decl partial sia_trap_test (Value) Reg)
+(rule (sia_trap_test value @ (value_type $I32)) (put_in_reg value))
+(rule (sia_trap_test value @ (value_type $I8))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_extend dst (put_in_reg value) false 8 32))))
+        (writable_reg_to_reg dst)))
+(rule (sia_trap_test value @ (value_type $I16))
+      (let ((dst WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_extend dst (put_in_reg value) false 16 32))))
+        (writable_reg_to_reg dst)))
+(rule (sia_trap_test value @ (value_type $I64))
+      (let ((parts ValueRegs (put_in_regs value))
+            (dst WritableReg (temp_writable_reg $I32))
+            (_ Unit (emit (sia_or dst (value_regs_get parts 0) (value_regs_get parts 1)))))
+        (writable_reg_to_reg dst)))
+
 ;;;; Conditional traps ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (rule (lower (trapnz value code))
-      (let ((test Reg (put_in_reg value)))
+      (let ((test Reg (sia_trap_test value)))
         (side_effect (SideEffectNoResult.Inst (MInst.TrapIfNz test code)))))
 (rule (lower (trapz value code))
-      (let ((test Reg (put_in_reg value)))
+      (let ((test Reg (sia_trap_test value)))
         (side_effect (SideEffectNoResult.Inst (MInst.TrapIfZ test code)))))
 
 

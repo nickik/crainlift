@@ -446,3 +446,77 @@ fn dynamic_stack_allocation_survives_call_and_fixed_slot_access() {
     assert!(!code.is_empty());
     assert_eq!(&code[code.len() - 2..], &[0xe0, 0xc0]);
 }
+
+#[test]
+fn generic_traps_compile_to_faults_with_trap_metadata() {
+    use cranelift_codegen::ir::{AbiParam, TrapCode};
+    for ty in [I8, I16, I32, I64] {
+        for mode in 0..3 {
+            let trap_code = TrapCode::user(2).unwrap();
+            let mut sig = Signature::new(CallConv::SystemV);
+            sig.params.push(AbiParam::new(ty));
+            let mut func = Function::with_name_signature(UserFuncName::testcase("fault"), sig);
+            let block = func.dfg.make_block();
+            let input = func.dfg.append_block_param(block, ty);
+            func.layout.append_block(block);
+            {
+                let mut pos = FuncCursor::new(&mut func);
+                pos.goto_bottom(block);
+                match mode {
+                    0 => {
+                        pos.ins().trap(trap_code);
+                    }
+                    1 => {
+                        pos.ins().trapz(input, trap_code);
+                        pos.ins().return_(&[]);
+                    }
+                    _ => {
+                        pos.ins().trapnz(input, trap_code);
+                        pos.ins().return_(&[]);
+                    }
+                }
+            }
+            let isa = isa::lookup("sia32-unknown-none".parse().unwrap())
+                .unwrap()
+                .finish(settings::Flags::new(settings::builder()))
+                .unwrap();
+            let mut ctx = Context::for_function(func);
+            let compiled = ctx.compile(&*isa, &mut ControlPlane::default()).unwrap();
+            let traps = compiled.buffer.traps();
+            assert_eq!(traps.len(), 1);
+            assert_eq!(traps[0].code, trap_code);
+            let site = traps[0].offset as usize;
+            assert_eq!(&compiled.code_buffer()[site..site + 2], &[0, 0xf8]);
+            if mode != 0 {
+                if let Some(dir) = std::env::var_os("SIA32_CONDITIONAL_TRAP_OUTPUT") {
+                    let dir = std::path::PathBuf::from(dir);
+                    std::fs::create_dir_all(&dir).unwrap();
+                    std::fs::write(
+                        dir.join(format!("{ty}-{mode}.text")),
+                        compiled.code_buffer(),
+                    )
+                    .unwrap();
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn narrow_and_word_integer_negation_compile() {
+    use cranelift_codegen::ir::AbiParam;
+    for ty in [I8, I16, I32] {
+        let mut sig = Signature::new(CallConv::SystemV);
+        sig.params.push(AbiParam::new(ty));
+        sig.returns.push(AbiParam::new(ty));
+        let mut func = Function::with_name_signature(UserFuncName::testcase("negate"), sig);
+        let block = func.dfg.make_block();
+        let value = func.dfg.append_block_param(block, ty);
+        func.layout.append_block(block);
+        let mut pos = FuncCursor::new(&mut func);
+        pos.goto_bottom(block);
+        let negative = pos.ins().ineg(value);
+        pos.ins().return_(&[negative]);
+        assert!(!compile_function(func).unwrap().is_empty());
+    }
+}
