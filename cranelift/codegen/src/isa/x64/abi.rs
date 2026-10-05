@@ -153,6 +153,28 @@ impl ABIMachineSpec for X64ABIMachineSpec {
         for (ix, param) in params.iter().enumerate() {
             let last_param = ix == params.len() - 1;
 
+            if param.purpose == ir::ArgumentPurpose::SystemVVariadicCount {
+                if call_conv != isa::CallConv::SystemV
+                    || args_or_rets != ArgsOrRets::Args
+                    || param.value_type != types::I32
+                    || param.extension != ir::ArgumentExtension::None
+                    || !last_param
+                    || params[..ix].iter().any(|p| p.purpose == param.purpose)
+                {
+                    return Err(crate::CodegenError::Unsupported(
+                        "sysv_varargs requires one final unextended i32 x64 SystemV argument"
+                            .into(),
+                    ));
+                }
+                args.push(ABIArg::reg(
+                    regs::rax().to_real_reg().unwrap(),
+                    types::I32,
+                    ir::ArgumentExtension::None,
+                    param.purpose,
+                ));
+                continue;
+            }
+
             if let ir::ArgumentPurpose::StructArgument(size) = param.purpose {
                 let offset = next_stack as i64;
                 let size = size;
@@ -1349,6 +1371,67 @@ mod tests {
     use super::*;
     use crate::machinst::abi::Callee;
     use alloc::vec::Vec;
+
+    fn varargs_param(ty: ir::Type) -> ir::AbiParam {
+        let mut p = ir::AbiParam::new(ty);
+        p.purpose = ir::ArgumentPurpose::SystemVVariadicCount;
+        p
+    }
+    fn arg_locations(sig: ir::Signature) -> CodegenResult<Vec<ABIArg>> {
+        let f = ir::Function::with_name_signature(ir::UserFuncName::user(0, 0), sig.clone());
+        let sigs =
+            SigSet::new::<X64ABIMachineSpec>(&f, &settings::Flags::new(settings::builder()))?;
+        Ok(sigs.args(sigs.abi_sig_for_signature(&sig)).to_vec())
+    }
+    #[test]
+    fn variadic_count_preserves_exhausted_gpr_and_vector_locations() {
+        let mut sig = ir::Signature::new(isa::CallConv::SystemV);
+        for _ in 0..7 {
+            sig.params.push(ir::AbiParam::new(types::I64));
+        }
+        for _ in 0..9 {
+            sig.params.push(ir::AbiParam::new(types::F64));
+        }
+        let original = arg_locations(sig.clone()).unwrap();
+        sig.params.push(varargs_param(types::I32));
+        let args = arg_locations(sig).unwrap();
+        assert_eq!(
+            format!("{:?}", original),
+            format!("{:?}", &args[..original.len()])
+        );
+        match args.last().unwrap() {
+            ABIArg::Slots { slots, purpose } => {
+                assert_eq!(*purpose, ir::ArgumentPurpose::SystemVVariadicCount);
+                assert!(matches!(slots.as_slice(), [ABIArgSlot::Reg { reg, ty, .. }]
+                    if *reg == regs::rax().to_real_reg().unwrap() && *ty == types::I32));
+            }
+            _ => panic!("hidden count must be register argument"),
+        }
+    }
+    #[test]
+    fn invalid_variadic_count_signatures_are_rejected() {
+        for cc in [isa::CallConv::WindowsFastcall, isa::CallConv::Fast] {
+            let mut sig = ir::Signature::new(cc);
+            sig.params.push(varargs_param(types::I32));
+            assert!(arg_locations(sig).is_err());
+        }
+        for ty in [types::I8, types::I64, types::F32] {
+            let mut sig = ir::Signature::new(isa::CallConv::SystemV);
+            sig.params.push(varargs_param(ty));
+            assert!(arg_locations(sig).is_err());
+        }
+        let mut sig = ir::Signature::new(isa::CallConv::SystemV);
+        sig.returns.push(varargs_param(types::I32));
+        assert!(arg_locations(sig).is_err());
+        let mut sig = ir::Signature::new(isa::CallConv::SystemV);
+        sig.params.push(varargs_param(types::I32));
+        sig.params.push(ir::AbiParam::new(types::I64));
+        assert!(arg_locations(sig).is_err());
+        let mut sig = ir::Signature::new(isa::CallConv::SystemV);
+        sig.params.push(varargs_param(types::I32));
+        sig.params.push(varargs_param(types::I32));
+        assert!(arg_locations(sig).is_err());
+    }
 
     fn make_frame_layout(total_relevant_fields_sum: u32) -> FrameLayout {
         FrameLayout {

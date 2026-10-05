@@ -75,6 +75,15 @@ impl ABIMachineSpec for Sia32MachineDeps {
         add_ret_area_ptr: bool,
         mut args: ArgsAccumulator,
     ) -> CodegenResult<(u32, Option<usize>)> {
+        if params
+            .iter()
+            .any(|p| p.purpose == ir::ArgumentPurpose::SystemVVariadicCount)
+        {
+            return Err(crate::CodegenError::Unsupported(
+                "sysv_varargs is supported only by x86-64 SystemV".into(),
+            ));
+        }
+
         ensure_call_conv(call_conv)?;
         if add_ret_area_ptr && args_or_rets != ArgsOrRets::Args {
             return Err(CodegenError::Unsupported(
@@ -545,6 +554,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn x64_variadic_hidden_count_is_rejected() {
+        let mut sig = Signature::new(isa::CallConv::SystemV);
+        sig.params.push(ir::AbiParam::special(
+            I32,
+            ir::ArgumentPurpose::SystemVVariadicCount,
+        ));
+        let f = ir::Function::with_name_signature(ir::UserFuncName::user(0, 0), sig);
+        assert!(
+            crate::machinst::SigSet::new::<Sia32MachineDeps>(
+                &f,
+                &settings::Flags::new(settings::builder()),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn machine_abi_has_expected_word_and_stack_size() {
         assert_eq!(Sia32MachineDeps::word_bits(), 32);
         assert_eq!(Sia32MachineDeps::word_bytes(), 4);
@@ -571,6 +597,47 @@ mod tests {
             assert!(!env.preferred_regs_by_class[0].contains(preg));
             assert!(!env.non_preferred_regs_by_class[0].contains(preg));
         }
+    }
+
+    #[test]
+    fn reserved_frame_pointer_is_saved_before_replacement() {
+        let flags = settings::Flags::new(settings::builder());
+        let sig = Signature::new(isa::CallConv::SystemV);
+        let frame = Sia32MachineDeps::compute_frame_layout(
+            isa::CallConv::SystemV,
+            &flags,
+            &sig,
+            &[],
+            FunctionCalls::Regular,
+            0,
+            0,
+            0,
+            16,
+            0,
+        );
+        assert!(
+            frame
+                .clobbered_callee_saves
+                .iter()
+                .any(|r| r.to_reg().hw_enc() == 15)
+        );
+        let instructions =
+            Sia32MachineDeps::gen_clobber_save(isa::CallConv::SystemV, &flags, &frame);
+        let save = instructions
+            .iter()
+            .position(|inst| {
+                matches!(inst,
+            Inst::StoreBaseOffset { src, .. } if *src == regs::frame_reg())
+            })
+            .unwrap();
+        let replacement = instructions
+            .iter()
+            .position(|inst| {
+                matches!(inst,
+            Inst::Mov { dst, .. } if dst.to_reg() == regs::frame_reg())
+            })
+            .unwrap();
+        assert!(save < replacement);
     }
 
     #[test]
