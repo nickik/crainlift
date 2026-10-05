@@ -256,6 +256,11 @@ pub enum ArgumentPurpose {
     /// This is a pointer to a context struct containing details about the current sandbox. It is
     /// used as a base pointer for `vmctx` global values.
     VMContext,
+
+    /// x86-64 System V hidden vector-register count for a variadic call.
+    /// Must be one final i32 argument, supplied in EAX without consuming an
+    /// ordinary argument register. The caller supplies a count in 0..=8.
+    SystemVVariadicCount,
 }
 
 impl fmt::Display for ArgumentPurpose {
@@ -265,6 +270,7 @@ impl fmt::Display for ArgumentPurpose {
             Self::StructArgument(size) => return write!(f, "sarg({size})"),
             Self::StructReturn => "sret",
             Self::VMContext => "vmctx",
+            Self::SystemVVariadicCount => "sysv_varargs",
         })
     }
 }
@@ -276,6 +282,7 @@ impl FromStr for ArgumentPurpose {
             "normal" => Ok(Self::Normal),
             "sret" => Ok(Self::StructReturn),
             "vmctx" => Ok(Self::VMContext),
+            "sysv_varargs" => Ok(Self::SystemVVariadicCount),
             _ if s.starts_with("sarg(") => {
                 if !s.ends_with(")") {
                     return Err(());
@@ -383,6 +390,7 @@ mod tests {
             (ArgumentPurpose::Normal, "normal"),
             (ArgumentPurpose::StructReturn, "sret"),
             (ArgumentPurpose::VMContext, "vmctx"),
+            (ArgumentPurpose::SystemVVariadicCount, "sysv_varargs"),
             (ArgumentPurpose::StructArgument(42), "sarg(42)"),
         ];
         for &(e, n) in &all_purpose {

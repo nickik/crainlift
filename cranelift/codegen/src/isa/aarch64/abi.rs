@@ -158,6 +158,15 @@ impl ABIMachineSpec for AArch64MachineDeps {
         add_ret_area_ptr: bool,
         mut args: ArgsAccumulator,
     ) -> CodegenResult<(u32, Option<usize>)> {
+        if params
+            .iter()
+            .any(|p| p.purpose == ir::ArgumentPurpose::SystemVVariadicCount)
+        {
+            return Err(crate::CodegenError::Unsupported(
+                "sysv_varargs is supported only by x86-64 SystemV".into(),
+            ));
+        }
+
         let is_apple_cc = call_conv == isa::CallConv::AppleAarch64;
         let is_winch_return = call_conv == isa::CallConv::Winch && args_or_rets == ArgsOrRets::Rets;
 
