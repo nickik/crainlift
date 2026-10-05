@@ -91,6 +91,15 @@ impl ABIMachineSpec for Riscv64MachineDeps {
         add_ret_area_ptr: bool,
         mut args: ArgsAccumulator,
     ) -> CodegenResult<(u32, Option<usize>)> {
+        if params
+            .iter()
+            .any(|p| p.purpose == ir::ArgumentPurpose::SystemVVariadicCount)
+        {
+            return Err(crate::CodegenError::Unsupported(
+                "sysv_varargs is supported only by x86-64 SystemV".into(),
+            ));
+        }
+
         // This implements the LP64D RISC-V ABI.
 
         assert_ne!(
